@@ -35,6 +35,8 @@ class Services:
     # Background saves need a long-running process (`serve`); one-shot CLI
     # commands save before they exit instead.
     background_saves: bool = False
+    # Why PICTUREHOUSE_ADMIN_PIN gave no PIN ("blank" / "invalid"), for the console.
+    pin_problem: str | None = None
 
     def metadata_changed(self) -> None:
         """After matches/fixes/edits: refresh the local copies, if switched on."""

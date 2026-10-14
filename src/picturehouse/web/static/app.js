@@ -816,6 +816,13 @@ function adminHTML(a) {
       <button class="btn small" data-nav data-act="admin-logout">Sign out</button></div>`;
   }
   if (!a.pin_set) {
+    const where = 'in the app\'s settings (on ZimaOS: App Store → My Apps → PictureHouse → ⋮ → Settings → Environment), then reload this page';
+    if (a.pin_problem === 'invalid') {
+      return `<div class="panel adminbar warn"><span><b>The admin PIN wasn't accepted.</b> PICTUREHOUSE_ADMIN_PIN must be 4 to 12 digits, numbers only. Change it ${where}.</span></div>`;
+    }
+    if (a.pin_problem === 'blank') {
+      return `<div class="panel adminbar warn"><span><b>No admin PIN is set</b>, so folders and settings can't be changed yet. Set PICTUREHOUSE_ADMIN_PIN (4 to 12 digits) ${where}.</span></div>`;
+    }
     return '<div class="panel adminbar"><span>You can browse and play here. Folders, settings and matches are changed on the PC running PictureHouse (it can set a PIN to allow changes from this device).</span></div>';
   }
   return `<form class="panel adminbar" id="loginform" novalidate autocomplete="off">

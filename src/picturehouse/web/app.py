@@ -1195,7 +1195,11 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     @api.get("/admin")
     def admin_state(request: Request):
         return {"admin": is_admin(request), "this_pc": on_this_pc(request),
-                "pin_set": gate.pin_set}  # fmt: skip
+                "pin_set": gate.pin_set,
+                # The PIN from the app's settings (PICTUREHOUSE_ADMIN_PIN) was
+                # left blank or wasn't 4-12 digits: say so instead of pointing
+                # at a "PC running PictureHouse" a NAS doesn't have.
+                "pin_problem": None if gate.pin_set else svc.pin_problem}  # fmt: skip
 
     @api.post("/admin/login")
     def admin_login(body: AdminLogin, request: Request):

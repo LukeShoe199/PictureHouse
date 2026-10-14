@@ -477,10 +477,13 @@ def _save_local_if_on(svc) -> None:
 ENV_ADMIN_PIN = "PICTUREHOUSE_ADMIN_PIN"
 
 
-def _apply_env_pin(layout) -> None:
+def _apply_env_pin(layout) -> str | None:
     """``PICTUREHOUSE_ADMIN_PIN``: set the admin PIN when the server starts.
     For servers no browser ever reaches as "this PC" (a Docker container, a
-    NAS): without a PIN nothing could change their folders or settings."""
+    NAS): without a PIN nothing could change their folders or settings.
+
+    Returns why no PIN came of it ("blank" or "invalid"), for the console to
+    explain, or None (PIN set, or the variable isn't used)."""
     from picturehouse.web.access import AdminGate, valid_pin
 
     pin = os.environ.get(ENV_ADMIN_PIN)
@@ -492,14 +495,16 @@ def _apply_env_pin(layout) -> None:
                 " until then only this machine itself can change folders and settings",
                 ENV_ADMIN_PIN,
             )
-        return
+            return "blank"
+        return None
     pin = pin.strip()
     if not valid_pin(pin):
-        log.warning("%s must be 4 to 12 digits; ignored", ENV_ADMIN_PIN)
-        return
+        log.warning("%s must be 4 to 12 digits (numbers only); ignored", ENV_ADMIN_PIN)
+        return None if gate.pin_set else "invalid"
     if not gate.check_pin(pin):  # new or changed: set it (signs other devices out)
         gate.set_pin(pin)
         log.info("admin PIN set from %s", ENV_ADMIN_PIN)
+    return None
 
 
 @app.command("admin-pin")
@@ -771,7 +776,7 @@ def serve_cmd(
         # ... and it doesn't outlive the desktop app.
         parent = os.environ.get("PICTUREHOUSE_PARENT_PID", "")
         procs.exit_with_parent(int(parent) if parent.isdigit() else None)
-    _apply_env_pin(st.layout)
+    pin_problem = _apply_env_pin(st.layout)
 
     with log_context(job_id=new_job_id("startup")):
         results = run_startup_checks(settings, st.layout, include_port=True)
@@ -797,6 +802,7 @@ def serve_cmd(
             https = {"port": server_cfg.https_port, "files": tls_files}
         else:
             log.warning("HTTPS disabled: %s", port_ok.detail)
+    svc.pin_problem = pin_problem
     web = create_app(svc, dlna=dlna_srv, https=https)
     stop = threading.Event()
     svc.background_saves = True  # local metadata copies are written as matches happen

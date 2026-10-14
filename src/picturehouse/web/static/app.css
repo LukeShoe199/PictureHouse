@@ -351,6 +351,8 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--li
 .adminbar > span b { color: var(--fg); }
 .adminbar .field { flex: 0 1 180px; }
 .adminbar .formerr { flex-basis: 100%; margin: 0; }
+.adminbar.warn { border-color: var(--warn); }
+.adminbar.warn > span { color: var(--fg); }
 /* Other devices without the admin PIN: hide what they can't do (the server refuses it anyway). */
 .viewonly :is([data-act="scan-all"], [data-act="scan-one"], [data-act="add"], [data-act="remove"], [data-act="retry"],
   [data-act="audio-recheck"], [data-act="audio-dismiss"], [data-act="apply"], [data-act="fix"]) { display: none; }

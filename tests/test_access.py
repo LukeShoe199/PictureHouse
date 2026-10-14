@@ -59,7 +59,12 @@ def test_pin_hashing():
 
 def test_this_pc_is_admin(app):
     with TestClient(app, **LOCAL) as c:
-        assert c.get("/api/admin").json() == {"admin": True, "this_pc": True, "pin_set": False}
+        assert c.get("/api/admin").json() == {
+            "admin": True,
+            "this_pc": True,
+            "pin_set": False,
+            "pin_problem": None,
+        }
         assert c.post("/api/scan", json={}).status_code == 202
 
 
@@ -125,7 +130,7 @@ def test_changing_pin_signs_everyone_out(app):
         with TestClient(app, **LOCAL) as pc:
             assert pc.put("/api/admin/pin", json={"pin": None}).status_code == 204
         assert phone.get("/api/admin").json() == {"admin": False, "this_pc": False,
-                                                  "pin_set": False}  # fmt: skip
+                                                  "pin_set": False, "pin_problem": None}  # fmt: skip
 
 
 def test_wrong_pins_are_rate_limited(app):
@@ -187,7 +192,7 @@ def test_blank_admin_pin_in_the_app_file_warns(tmp_path, monkeypatch, caplog):
     layout = DataLayout(tmp_path / "d")
     monkeypatch.setenv("PICTUREHOUSE_ADMIN_PIN", "  ")
     with caplog.at_level("WARNING"):
-        _apply_env_pin(layout)
+        assert _apply_env_pin(layout) == "blank"
     assert "no admin PIN" in caplog.text
     assert not access.AdminGate(layout.root).pin_set
 
@@ -197,3 +202,28 @@ def test_blank_admin_pin_in_the_app_file_warns(tmp_path, monkeypatch, caplog):
         _apply_env_pin(layout)
     assert "no admin PIN" not in caplog.text
     assert access.AdminGate(layout.root).check_pin("2468")
+
+
+def test_rejected_admin_pin_is_reported_to_the_console(tmp_path, monkeypatch):
+    """A PIN that isn't 4-12 digits used to be ignored with only a log line,
+    leaving the NAS console locked and unexplained."""
+    from picturehouse.cli import _apply_env_pin
+    from picturehouse.paths import DataLayout
+
+    layout = DataLayout(tmp_path / "d")
+    for bad in ("my-secret-pin", "123", "1234567890123"):
+        monkeypatch.setenv("PICTUREHOUSE_ADMIN_PIN", bad)
+        assert _apply_env_pin(layout) == "invalid", bad
+    monkeypatch.setenv("PICTUREHOUSE_ADMIN_PIN", "246813")
+    assert _apply_env_pin(layout) is None
+    monkeypatch.setenv("PICTUREHOUSE_ADMIN_PIN", "not-digits")
+    assert _apply_env_pin(layout) is None  # a valid PIN is already set: nothing to explain
+
+    (tmp_path / "media").mkdir()
+    svc = make_services(tmp_path / "media", tmp_path / "data")
+    svc.pin_problem = "invalid"
+    with TestClient(create_app(svc), **LAN) as c:
+        assert c.get("/api/admin").json()["pin_problem"] == "invalid"
+        access.AdminGate(svc.layout.root).set_pin("2468")
+        assert c.get("/api/admin").json()["pin_problem"] is None  # fixed: the bar goes back
+    svc.close()

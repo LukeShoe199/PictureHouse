@@ -12,7 +12,7 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      # Your own 4 to 12 digits: REQUIRED. No browser ever counts as "the PC
+      # Your own 4 to 12 digits, numbers only: REQUIRED. No browser ever counts as "the PC
       # running PictureHouse" on a NAS, so folders and settings are changed
       # after entering this PIN in the console (Library page).
       PICTUREHOUSE_ADMIN_PIN: ""
@@ -45,7 +45,7 @@ services:
       envs:
         - container: PICTUREHOUSE_ADMIN_PIN
           description:
-            en_us: Admin PIN (4 to 12 digits) for changing folders and settings from the console.
+            en_us: "REQUIRED: admin PIN, 4 to 12 digits (numbers only), for adding folders and changing settings in the console."
         - container: TZ
           description:
             en_us: Time zone.
@@ -94,6 +94,6 @@ x-casaos:
   tips:
     before_install:
       en_us: >-
-        Set PICTUREHOUSE_ADMIN_PIN below (4 to 12 digits of your choice)
+        Set PICTUREHOUSE_ADMIN_PIN below (4 to 12 digits, numbers only)
         before installing. You'll enter it in the console (Library page) to
         add your media folders.

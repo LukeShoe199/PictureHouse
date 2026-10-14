@@ -1,10 +1,14 @@
 # PictureHouse for ZimaOS (and CasaOS): import this in the ZimaOS dashboard
 # with App Store -> Custom Install -> Import (see zimaos/README.md).
 # Works with plain Docker Compose too:  docker compose up -d
+# (update: docker compose pull && docker compose up -d)
 name: picturehouse
 services:
   picturehouse:
-    image: ghcr.io/lukeshoe199/picturehouse:0.1.1
+    # "latest": each release republishes it, so ZimaOS can offer the update
+    # (My Apps -> Update) without this file changing. Pin a version, e.g.
+    # :0.1.1, to stay on it.
+    image: ghcr.io/lukeshoe199/picturehouse:latest
     container_name: picturehouse
     # Host networking: TVs find PictureHouse by DLNA (SSDP multicast, UDP
     # 1900), which Docker's bridge network doesn't pass. The web console is

@@ -23,8 +23,11 @@ docker login ghcr.io -u lukeshoe199     # once, with a token that has write:pack
 uv run python zimaos/build_docker.py --push
 ```
 
-Bump the version in `pyproject.toml` and the `image:` line in
-`docker-compose.yml` together.
+Bump the version in `pyproject.toml` first. `--push` publishes both
+`:<version>` and `:latest`. The app file uses `:latest`, so installed copies
+pick the release up as an update without a new app file. Only when
+`docker-compose.yml` itself changes (volumes, environment) do users need to
+paste the new file into the app's Settings → YAML.
 
 ZimaOS's installer always downloads the image, and it fails if the download
 fails, even when the image is already on the box. So a new version has to be

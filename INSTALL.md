@@ -202,7 +202,7 @@ Use the same image as ZimaOS. Copy `zimaos/docker-compose.yml` and edit it:
 - change the `/DATA` volume to your media folder (e.g. `/home/you/Media`);
 - change `/DATA/AppData/picturehouse` to a folder you back up.
 
-Then run `docker compose up -d`.
+Then run `docker compose up -d`. To update later: `docker compose pull && docker compose up -d`.
 
 ### Firewall (all options)
 
@@ -259,13 +259,15 @@ Good to know:
 - **Converting video uses the CPU.** ZimaBoard and ZimaBlade play most files
   directly with ease, but converting 4K, or several videos at once, is too
   much for them. Keep **Library → DLNA → Videos converted at once** at 1.
-- **Updating:** open the new release's `docker-compose.yml` and copy its
-  contents. In **My Apps**, open the running PictureHouse's **⋮** menu →
-  **Settings** → **YAML**, replace everything with what you copied, put your
-  admin PIN back in, and **Save**. ZimaOS swaps in the new version; your
-  library is kept (it lives in `/DATA/AppData/picturehouse`). Don't use
-  *Install Custom App* for an update: that installs a second copy, which
-  fails because the first is running.
+- **Updating:** the app follows PictureHouse's `latest` release, so when a
+  new version is out, ZimaOS offers it under **My Apps → Update**. Your
+  library is kept (it lives in `/DATA/AppData/picturehouse`).
+  - If a release says its **app file changed**, copy the new
+    `docker-compose.yml`, then in **My Apps** open the running PictureHouse's
+    **⋮** menu → **Settings** → **YAML**, replace everything with it, put
+    your admin PIN back in, and **Save**.
+  - Don't use *Install Custom App* for an update: that installs a second
+    copy, which fails because the first is running.
 
 **Optional: the command line.** In Settings → General → Developer mode,
 turn on **SSH access**, then open **Web-based terminal**. Log in with your

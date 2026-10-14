@@ -77,6 +77,32 @@ The APK goes to `app/build/outputs/apk/release/app-release.apk` and is
 copied to where the server offers it for download. Desktop builds made
 afterwards (`windows/`, `linux/`) include it, for the Library page.
 
+### Building your own signed version
+
+Anyone can build, change and share PictureHouse for Android (MIT licence).
+To make your own builds that update each other properly:
+
+1. Create your own key, once, with a password you save in your password
+   manager:
+   ```bash
+   uv run python "Android APK/build_android.py" --create-key
+   ```
+2. Build with your key and your own app ID:
+   ```bash
+   uv run python "Android APK/build_android.py" --use-my-key --app-id com.yourname.picturehouse
+   ```
+   `--use-my-key` records your key's fingerprint in `signing-certificate.txt`,
+   replacing the official one in your copy. From then on, your builds are
+   checked against your key. Next time you only need `--app-id …` (keep it
+   the same every time).
+
+The app ID matters because Android identifies an app by it. With your own
+ID, your build installs alongside the official app. With the official ID,
+a phone can only have one of them, and switching means uninstalling first.
+Either way, only builds signed with the same key can update each other: your
+builds can't replace the official app, and official releases can't replace
+yours.
+
 ### Release signing (maintainer)
 
 - **Once:** run `build_android.py --create-key`. It creates the release key
@@ -89,4 +115,6 @@ afterwards (`windows/`, `linux/`) include it, for the Library page.
   somewhere else, such as a USB stick. The version number comes from
   PictureHouse's version (`pyproject.toml`), so each release is an upgrade.
 - After building, the script checks the APK's certificate against
-  `signing-certificate.txt` and refuses to finish if it differs.
+  `signing-certificate.txt` and refuses to finish if it differs, unless
+  `--use-my-key` is given. That's for other people's copies; never use it
+  for an official release.

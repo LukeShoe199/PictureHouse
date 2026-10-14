@@ -3,6 +3,7 @@
     uv run python "Android APK/build_android.py" --create-key   # once, ever
     uv run python "Android APK/build_android.py"                # each release
     uv run python "Android APK/build_android.py" --debug-key    # test build only
+    uv run python "Android APK/build_android.py" --use-my-key   # your own copy/fork
 
 Signing: release APKs are signed with PictureHouse's release key, a PKCS#12
 keystore kept OUTSIDE the repository (default ~/.picturehouse/
@@ -13,7 +14,10 @@ reaches Gradle through the environment, never the command line or a file.
 
 After building, the APK's certificate is checked against
 signing-certificate.txt (committed, public), so a build can't silently go out
-signed with some other key.
+signed with some other key. Building your own copy with your own key?
+--use-my-key records your key's certificate there instead (once), and
+--app-id gives your app its own identity so it installs alongside the
+official one (see README.md).
 
 Versions: versionName is PictureHouse's version, versionCode is derived
 from it (major*10000 + minor*100 + patch), so every release is an upgrade.
@@ -170,6 +174,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--create-key", action="store_true", help="create the release key (once)")
     ap.add_argument("--debug-key", action="store_true", help="sign with this PC's debug key")
+    ap.add_argument(
+        "--use-my-key",
+        action="store_true",
+        help="your own copy: record your key's certificate in signing-certificate.txt",
+    )
+    ap.add_argument(
+        "--app-id",
+        default="com.picturehouse.android",
+        help="Android application ID (change it for your own copy, e.g. com.yourname.picturehouse)",
+    )
     a = ap.parse_args()
     if a.create_key:
         return create_key()
@@ -200,7 +214,8 @@ def main() -> int:
         # --no-daemon: a background Gradle daemon keeps the key file open and
         # caches the key it first read, so a new key/password would be ignored.
         [str(gradlew), "assembleRelease", "--console=plain", "-q", "--no-daemon",
-         f"-PphVersionName={name}", f"-PphVersionCode={code}"],
+         f"-PphVersionName={name}", f"-PphVersionCode={code}",
+         f"-PphApplicationId={a.app_id}"],
         cwd=ANDROID,
         env=env,
     )  # fmt: skip
@@ -211,21 +226,27 @@ def main() -> int:
     cert = fingerprint(certificate_sha256(APK))
     if not a.debug_key:
         expected = CERT_FILE.read_text(encoding="utf-8").strip() if CERT_FILE.exists() else ""
-        if not expected:
+        if not expected or (expected != cert and a.use_my_key):
             CERT_FILE.write_text(cert + "\n", encoding="utf-8")
-            print(f"recorded the release certificate in {CERT_FILE.relative_to(REPO)}")
+            print(f"recorded this key's certificate in {CERT_FILE.relative_to(REPO)}")
+            if expected:
+                print("Your copy's future builds are now checked against your key.")
         elif expected != cert:
             APK.unlink()
             sys.exit(
                 f"This APK was signed with a DIFFERENT key than earlier releases:\n"
                 f"  this build: {cert}\n  releases:   {expected}\n"
-                "Phones would refuse it as an update. Restore the original key."
+                "Phones would refuse it as an update to those releases.\n"
+                "- Making an official release? Use the original key (restore it from\n"
+                "  your backup, or set PICTUREHOUSE_KEYSTORE to where it is).\n"
+                "- Building your own copy with your own key? Run again with --use-my-key\n"
+                "  (and ideally --app-id com.yourname.picturehouse); see README.md."
             )
     DEST.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(APK, DEST)
-    kind = "DEBUG key" if a.debug_key else "release key"
+    kind = "this PC's DEBUG key" if a.debug_key else f"the key in {store}"
     print(f"built {DEST} ({DEST.stat().st_size // 1024} KB), version {name} ({code})")
-    print(f"signed with the {kind}, SHA-256 {cert}")
+    print(f"signed with {kind}, SHA-256 {cert}")
     return 0
 
 

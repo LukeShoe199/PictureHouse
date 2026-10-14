@@ -11,7 +11,8 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.picturehouse.android"
+        // build_android.py --app-id gives your own copy its own identity.
+        applicationId = (findProperty("phApplicationId") as String?) ?: "com.picturehouse.android"
         minSdk = 26 // Android 8.0
         targetSdk = 36
         // Set from PictureHouse's version by build_android.py.

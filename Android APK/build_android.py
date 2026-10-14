@@ -107,6 +107,40 @@ def fingerprint(hex_digest: str) -> str:
     return ":".join(hex_digest[i : i + 2] for i in range(0, 64, 2)).upper()
 
 
+def password_opens(store: Path, env: dict[str, str]) -> bool:
+    """Check the password with keytool before Gradle, whose failure is vague.
+    keytool reads it from the environment (-storepass:env), never argv."""
+    out = subprocess.run(
+        [java_tool("keytool"), "-list", "-keystore", str(store), "-storetype", "PKCS12",
+         "-alias", ALIAS, "-storepass:env", "PICTUREHOUSE_KEYSTORE_PASSWORD"],
+        capture_output=True, text=True, env=env,
+    )  # fmt: skip
+    if out.returncode == 0:
+        return True
+    reason = (out.stdout + out.stderr).strip().splitlines()
+    print(f"  keytool: {reason[-1] if reason else 'failed'}")
+    return False
+
+
+def unlock(store: Path, env: dict[str, str]) -> bool:
+    if env.get("PICTUREHOUSE_KEYSTORE_PASSWORD"):
+        if password_opens(store, env):
+            return True
+        print(f"PICTUREHOUSE_KEYSTORE_PASSWORD doesn't open {store}.")
+        return False
+    for attempt in range(3):
+        env["PICTUREHOUSE_KEYSTORE_PASSWORD"] = getpass.getpass(f"Password for {store.name}: ")
+        if password_opens(store, env):
+            print("Password OK.")
+            return True
+        print(f"That password doesn't open {store} ({2 - attempt} tries left).")
+    print(
+        "If this key was just created and nothing has been published with it, you can\n"
+        "delete it and run --create-key again with a password you've saved first."
+    )
+    return False
+
+
 def create_key() -> int:
     store = keystore_path()
     if store.exists():
@@ -155,15 +189,17 @@ def main() -> int:
                 "PICTUREHOUSE_KEYSTORE). For a test build, use --debug-key."
             )
         env["PICTUREHOUSE_KEYSTORE"] = str(store)
-        if not env.get("PICTUREHOUSE_KEYSTORE_PASSWORD"):
-            env["PICTUREHOUSE_KEYSTORE_PASSWORD"] = getpass.getpass(f"Password for {store.name}: ")
+        if not unlock(store, env):
+            return 1
 
     sdk_dir()  # writes local.properties if missing
     gradlew = ANDROID / ("gradlew.bat" if os.name == "nt" else "gradlew")
     if APK.exists():
         APK.unlink()
     proc = subprocess.run(
-        [str(gradlew), "assembleRelease", "--console=plain", "-q",
+        # --no-daemon: a background Gradle daemon keeps the key file open and
+        # caches the key it first read, so a new key/password would be ignored.
+        [str(gradlew), "assembleRelease", "--console=plain", "-q", "--no-daemon",
          f"-PphVersionName={name}", f"-PphVersionCode={code}"],
         cwd=ANDROID,
         env=env,

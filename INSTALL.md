@@ -259,13 +259,13 @@ Good to know:
 - **Converting video uses the CPU.** ZimaBoard and ZimaBlade play most files
   directly with ease, but converting 4K, or several videos at once, is too
   much for them. Keep **Library → DLNA → Videos converted at once** at 1.
-- **Updating:** download the new release's `docker-compose.yml`. In **My
-  Apps**, open PictureHouse's **⋮** menu → **Settings**, switch to **YAML**
-  (or use **Import**), and replace the contents with the new file. Put your
-  admin PIN back in, then **Save**. Your library is kept: it lives in
-  `/DATA/AppData/picturehouse`. If your ZimaOS has no YAML or Import option
-  there, uninstall PictureHouse **without** deleting its data, then install
-  the new file as in step 1.
+- **Updating:** open the new release's `docker-compose.yml` and copy its
+  contents. In **My Apps**, open the running PictureHouse's **⋮** menu →
+  **Settings** → **YAML**, replace everything with what you copied, put your
+  admin PIN back in, and **Save**. ZimaOS swaps in the new version; your
+  library is kept (it lives in `/DATA/AppData/picturehouse`). Don't use
+  *Install Custom App* for an update: that installs a second copy, which
+  fails because the first is running.
 
 **Optional: the command line.** In Settings → General → Developer mode,
 turn on **SSH access**, then open **Web-based terminal**. Log in with your

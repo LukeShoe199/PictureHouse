@@ -197,13 +197,33 @@ class Scanner:
     def scan(self, names: list[str] | None = None, *, full: bool = False) -> list[ScanResult]:
         """Scan the named roots (default: all configured). Blocking; one scan at
         a time — a second call while one is running returns ``[]``."""
-        if not self._lock.acquire(blocking=False):
+        if not self._claim():
             return []
+        return self._run_claimed(names, full)
+
+    def start_in_background(self, names: list[str] | None = None, *, full: bool = False) -> bool:
+        """Start a scan on its own thread; False if one is already running.
+
+        The scan is marked running *before* this returns: anyone polling
+        ``progress`` right after (the console, tests) must not see the previous
+        scan's finished results and think this one is already done."""
+        if not self._claim():
+            return False
+        threading.Thread(target=self._run_claimed, args=(names, full),
+                         name="scan", daemon=True).start()  # fmt: skip
+        return True
+
+    def _claim(self) -> bool:
+        if not self._lock.acquire(blocking=False):
+            return False
+        self.progress = ScanProgress(running=True, started_at=time.time())
+        return True
+
+    def _run_claimed(self, names: list[str] | None, full: bool) -> list[ScanResult]:
         try:
             with self.db.session() as s:
                 q = select(LibraryRootRow).where(LibraryRootRow.configured)
                 roots = [r for r in s.scalars(q) if names is None or r.name in names]
-            self.progress = ScanProgress(running=True, started_at=time.time())
             results = []
             with log_context(job_id=new_job_id("scan")):
                 for root in roots:

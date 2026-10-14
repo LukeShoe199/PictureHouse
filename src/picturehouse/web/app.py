@@ -862,11 +862,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
         }  # fmt: skip
 
     def start_scan(names: list[str] | None = None, full: bool = False) -> bool:
-        if svc.scanner.running:
-            return False
-        threading.Thread(target=svc.scanner.scan, args=(names,), kwargs={"full": full},
-                         name="scan", daemon=True).start()  # fmt: skip
-        return True
+        return svc.scanner.start_in_background(names, full=full)
 
     app.state.start_scan = start_scan
 

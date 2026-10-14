@@ -122,6 +122,32 @@ def test_full_scan_flag_reaches_scanner(client):
     assert res["library"] == "TV" and res["changed"] == 6 and res["unchanged"] == 0
 
 
+def test_scan_shows_running_before_its_thread_starts(client, monkeypatch):
+    """CI race: right after POST /api/scan, a poll could see the *previous*
+    scan's finished results (running=False) and take them as this scan's."""
+    import threading
+    import time
+
+    release = threading.Event()
+    real_run = client.svc.scanner._run_claimed
+
+    def held(names, full):
+        release.wait(10)  # the scan thread can't begin until we say so
+        return real_run(names, full)
+
+    monkeypatch.setattr(client.svc.scanner, "_run_claimed", held)
+    assert client.post("/api/scan", json={"libraries": ["TV"]}).json()["started"]
+    state = client.get("/api/scan").json()
+    assert state["running"] is True and state["results"] == []
+    assert client.post("/api/scan", json={}).json()["started"] is False  # one at a time
+    release.set()
+    for _ in range(100):
+        if not client.get("/api/scan").json()["running"]:
+            break
+        time.sleep(0.1)
+    assert [r["library"] for r in client.get("/api/scan").json()["results"]] == ["TV"]
+
+
 def test_library_add_remove(client, tmp_path):
     folder = tmp_path / "New Films"
     folder.mkdir()

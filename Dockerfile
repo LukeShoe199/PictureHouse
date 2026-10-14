@@ -2,7 +2,7 @@
 #
 #   docker build -t picturehouse .
 #   docker run -d --name picturehouse --network host \
-#     -v /path/to/appdata:/data -v /path/to/media:/media:ro picturehouse
+#     -v /path/to/appdata:/data -v /path/to/media:/media:ro,rslave picturehouse
 #
 # --network host matters: TVs find the server by DLNA (SSDP multicast on UDP
 # 1900), which Docker's default bridge network doesn't pass. See

@@ -4,7 +4,7 @@
 name: picturehouse
 services:
   picturehouse:
-    image: ghcr.io/lukeshoe199/picturehouse:0.1.0
+    image: ghcr.io/lukeshoe199/picturehouse:0.1.1
     container_name: picturehouse
     # Host networking: TVs find PictureHouse by DLNA (SSDP multicast, UDP
     # 1900), which Docker's bridge network doesn't pass. The web console is
@@ -35,12 +35,15 @@ services:
         source: /DATA
         target: /DATA
         read_only: true
+      # External drives. "rslave": a drive plugged in after PictureHouse
+      # started still appears inside it (without, it needs a restart).
       - type: bind
         source: /media
         target: /media
         read_only: true
         bind:
           create_host_path: true
+          propagation: rslave
     x-casaos:
       envs:
         - container: PICTUREHOUSE_ADMIN_PIN

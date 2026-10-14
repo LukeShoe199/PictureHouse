@@ -47,6 +47,7 @@ tar -xf -
 uv sync --frozen --group dev
 uv run python scripts/build_server.py
 cd desktop
+rm -rf target/release/bundle  # the target dir is cached: drop old packages
 npx --yes {TAURI_CLI} build --bundles deb,appimage
 cp target/release/bundle/deb/*.deb target/release/bundle/appimage/*.AppImage /out/
 """

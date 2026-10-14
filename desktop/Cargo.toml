@@ -1,6 +1,6 @@
 [package]
 name = "picturehouse-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "PictureHouse desktop app: window, tray icon and server manager"
 edition = "2021"
 publish = false

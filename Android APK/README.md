@@ -29,7 +29,37 @@ A standard Gradle project (Kotlin, no external libraries) plus:
 
 | File | What it's for |
 |---|---|
-| `build_android.py` | Builds the release APK and copies it to where the server offers it for download (`src/picturehouse/web/static/downloads/`). |
+| `build_android.py` | Builds the signed release APK and copies it to where the server offers it for download (`src/picturehouse/web/static/downloads/`). Also creates the release key (`--create-key`, once). |
+| `signing-certificate.txt` | The SHA-256 fingerprint of the release signing certificate (public). |
+
+## Updating
+
+Install the newer APK the same way; it replaces the app and keeps its
+settings. Every release is signed with the same PictureHouse key, which is
+what lets Android accept it as an update.
+
+**If Android says "App not installed" or the package conflicts**, the copy
+on the phone was signed with a different key (for example a test build).
+Uninstall PictureHouse once, then install the new APK. Your library lives on
+the server, so nothing is lost.
+
+## Checking an APK is genuine
+
+Official APKs are signed with the certificate "CN=PictureHouse", whose SHA-256
+fingerprint is (also in [`signing-certificate.txt`](signing-certificate.txt)):
+
+```
+3D:6C:59:7B:83:4C:7B:5F:C5:21:DA:3F:DB:AF:EB:65:5F:BC:5D:84:10:6D:DE:BC:4B:5E:5A:AE:1C:8F:4E:07
+```
+
+To check a download, use `apksigner` from the Android SDK build-tools:
+
+```bash
+apksigner verify --print-certs PictureHouse-<version>.apk
+```
+
+The `certificate SHA-256 digest` must match that file (ignore the colons and
+the letter case).
 
 ## Building
 
@@ -37,15 +67,26 @@ You need the Android SDK (Android Studio installs it) and JDK 17 or later.
 From the repository's top folder:
 
 ```bash
-uv run python "Android APK/build_android.py"
+uv run python "Android APK/build_android.py" --debug-key
 ```
 
-The APK is at `Android APK/app/build/outputs/apk/release/app-release.apk`.
-Desktop builds made afterwards (`windows/`, `linux/`) include it, so the
-server can offer it on the Library page.
+That's a test build, signed with your computer's own debug key. Only the
+maintainer's release key makes APKs that update the published app.
 
-**Signing:** release builds are signed with the building computer's Android
-*debug* key. That's fine for installing it yourself. An update installs over
-the top only when it's signed by the same computer. Before distributing it
-widely, create a release keystore and set it as `signingConfig` in
-`app/build.gradle.kts`, kept out of git.
+The APK goes to `app/build/outputs/apk/release/app-release.apk` and is
+copied to where the server offers it for download. Desktop builds made
+afterwards (`windows/`, `linux/`) include it, for the Library page.
+
+### Release signing (maintainer)
+
+- **Once:** run `build_android.py --create-key`. It creates the release key
+  at `~/.picturehouse/android-release.p12` (outside the repository) with a
+  password you choose. **Back up the file and the password** (password
+  manager, plus a copy of the file off this computer). Without both, no
+  future version can update the app on anyone's phone.
+- **Each release:** run `build_android.py`. It asks for the password, or reads
+  `PICTUREHOUSE_KEYSTORE_PASSWORD`. Set `PICTUREHOUSE_KEYSTORE` if the key is
+  somewhere else, such as a USB stick. The version number comes from
+  PictureHouse's version (`pyproject.toml`), so each release is an upgrade.
+- After building, the script checks the APK's certificate against
+  `signing-certificate.txt` and refuses to finish if it differs.

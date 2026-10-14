@@ -40,3 +40,14 @@ tests/.fixture-media/
 /CLAUDE.md
 /docs/development-plan.md
 /docs/tv-testing.md
+
+# Signing keys never belong in the repository (the Android release key lives
+# in ~/.picturehouse/, see Android APK/build_android.py)
+*.p12
+*.jks
+*.keystore
+*.pfx
+*.pem
+
+# Personal notes kept in the project folder
+/Android Key.txt

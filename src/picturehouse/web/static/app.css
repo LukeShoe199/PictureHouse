@@ -343,6 +343,18 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--li
 .formbtns { display: flex; gap: 8px; flex-wrap: wrap; }
 .formerr { margin: 10px 0 0; color: var(--bad); font-size: 13.5px; overflow-wrap: anywhere; }
 .addform { margin-bottom: 12px; }
+.pathrow { display: flex; gap: 8px; }
+.pathrow input { flex: 1 1 auto; }
+.pathrow .btn { flex: none; height: 40px; }
+.browser { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.brhead { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; margin-bottom: 10px; color: var(--fg); }
+.brpath { font: 500 13px/1.4 var(--mono); overflow-wrap: anywhere; flex: 1 1 260px; }
+.browser .dirs { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; max-height: 340px; overflow: auto; padding: 2px; }
+.browser .dir { display: grid; gap: 2px; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); font: inherit; font-size: 14px; cursor: pointer; min-width: 0; }
+.browser .dir b { font-weight: 600; overflow-wrap: anywhere; }
+.browser .dir span { font: 12px/1.3 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.browser .dir.drive b::before { content: "▣ "; color: var(--accent); }
+.browser .dir:hover, .browser .dir:focus-visible { border-color: var(--accent); outline: none; }
 .addform .note { margin-top: 10px; }
 .addok { margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
 .addok span { flex: 1 1 240px; }

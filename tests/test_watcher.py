@@ -92,3 +92,43 @@ def test_reload_picks_up_new_root(watched, media_library, tmp_path):
     time.sleep(0.5)
     shutil.copytree(media_library / "TV" / "Test Show", tv / "Test Show")
     assert _wait_for(lambda: "Pilot" in _titles(svc)), _titles(svc)
+
+
+def test_drive_plugged_in_and_out_is_scanned_straight_away(media_library, tmp_path, monkeypatch):
+    """A library on a USB drive: plugged in after the server started, it
+    becomes available (and its films appear) without waiting for the periodic
+    scan or "Check now"; unplugged, it's marked offline (nothing deleted)."""
+    monkeypatch.setattr(watcher_mod, "SETTLE_MS", 400)
+    monkeypatch.setattr(watcher_mod, "RECHECK_MS", 500)
+    home = tmp_path / "Home"
+    home.mkdir()
+    usb = tmp_path / "USB" / "Films"  # not plugged in yet
+    toml = (
+        f"[[libraries]]\nname='Home'\npath='{home}'\nkind='films'\n"
+        f"[[libraries]]\nname='USB'\npath='{usb}'\nkind='films'\n"
+    )
+    svc = open_services(parse_config(toml), DataLayout(tmp_path / "d"), tmp_path / "d" / "c.toml")
+    try:
+        svc.scanner.scan()
+        svc.watcher = FolderWatcher(svc.db, svc.scanner)
+        svc.watcher.start()
+        assert _wait_for(lambda: "Home" in svc.watcher.watching)
+
+        def usb_available():
+            from picturehouse.db.models import LibraryRootRow
+
+            with svc.db.session() as s:
+                return s.scalar(
+                    select(LibraryRootRow.available).where(LibraryRootRow.name == "USB")
+                )
+
+        assert usb_available() is False
+        usb.mkdir(parents=True)  # plug it in
+        shutil.copy2(media_library / "Films" / "Amélie (2001).mp4", usb / "Amélie (2001).mp4")
+        assert _wait_for(lambda: usb_available() and _titles(svc) == ["Amélie"], 20), _titles(svc)
+
+        shutil.rmtree(tmp_path / "USB")  # unplug it
+        assert _wait_for(lambda: usb_available() is False, 20)
+        assert _titles(svc) == [] and "Amélie" in _titles(svc, available=False)
+    finally:
+        svc.close()

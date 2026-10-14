@@ -702,10 +702,11 @@ VIEWS.library = {
     const addForm = L.adding ? `<form class="panel addform" id="addform" novalidate autocomplete="off">
         <div class="form">
           <label class="field">Name<input name="name" required placeholder="Films" data-nav></label>
-          <label class="field">Folder path<input name="path" required placeholder="${esc(mediaHint() ? mediaHint().replace(/\/+$/, '') + '/Films' : 'D:\\Media\\Films')}" data-nav></label>
+          <label class="field">Folder path<span class="pathrow"><input name="path" required placeholder="${esc(mediaHint() ? mediaHint().replace(/\/+$/, '') + '/Films' : 'D:\\Media\\Films')}" data-nav><button type="button" class="btn small" data-nav data-act="browse-open">Browse…</button></span></label>
           <label class="field">Contains<select name="kind" data-nav>${KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
           <div class="formbtns"><button type="submit" class="btn primary small" data-nav>Add folder</button><button type="button" class="btn small" data-nav data-act="cancel-add">Cancel</button></div>
         </div>
+        <div class="browser" id="browser" hidden></div>
         <p class="formerr" id="adderr" role="alert" hidden></p>
         <p class="note">Any name works except one containing / or \\. ${mediaHint() ? `PictureHouse runs in a container here: use a folder path as the container sees it, under ${esc(mediaHint())}.` : 'The path is read on the computer running the server. Network shares work as \\\\server\\share.'} Media folders are never written to.</p>
       </form>` : '';
@@ -2110,6 +2111,57 @@ document.addEventListener('click', e => {
 });
 
 let confirmT;
+/* Folder browser for the Add folder form: lists the server's folders (as the
+   server sees them; in a container, the container's paths) so nobody has to
+   guess a path. Re-renders only #browser, keeping what's typed in the form. */
+const BR = { path: '' };
+const folderName = p => (p.split(/[\\/]/).filter(Boolean).pop() || p).replace(/:$/, ' drive');
+function browserHTML(d) {
+  if (d.roots) {
+    return `<div class="brhead"><b>Choose where to look</b>
+        <button type="button" class="btn small" data-nav data-act="browse-close">Close</button></div>
+      <div class="dirs">${d.roots.map(r => `<button type="button" class="dir${r.kind === 'drive' ? ' drive' : ''}" data-nav data-act="browse-go" data-path="${esc(r.path)}"><b>${esc(r.name)}</b><span>${esc(r.path)}</span></button>`).join('')}</div>`;
+  }
+  const dirs = d.dirs.length
+    ? d.dirs.map(x => `<button type="button" class="dir" data-nav data-act="browse-go" data-path="${esc(x.path)}"><b>${esc(x.name)}</b></button>`).join('')
+    : '<p class="note">No folders inside. If your media files are here, use this folder.</p>';
+  return `<div class="brhead"><span class="brpath">${esc(d.path)}</span>
+      <span class="formbtns">
+        <button type="button" class="btn primary small" data-nav data-act="browse-use">Use this folder</button>
+        ${d.parent ? `<button type="button" class="btn small" data-nav data-act="browse-go" data-path="${esc(d.parent)}">Up</button>` : ''}
+        <button type="button" class="btn small" data-nav data-act="browse-go" data-path="">Start</button>
+        <button type="button" class="btn small" data-nav data-act="browse-close">Close</button></span></div>
+    <div class="dirs">${dirs}</div>${d.truncated ? '<p class="note">Only the first 2,000 folders are shown.</p>' : ''}`;
+}
+async function browseTo(path) {
+  const box = $('#browser'); if (!box) return;
+  box.hidden = false;
+  box.setAttribute('aria-busy', 'true');
+  try {
+    const d = await api('/api/browse' + (path ? '?path=' + enc(path) : ''));
+    BR.path = path;
+    box.innerHTML = browserHTML(d);
+  } catch (e) {
+    box.innerHTML = `<p class="formerr">${esc(e.message)}</p><div class="formbtns">
+      <button type="button" class="btn small" data-nav data-act="browse-go" data-path="">Start again</button>
+      <button type="button" class="btn small" data-nav data-act="browse-close">Close</button></div>`;
+  }
+  box.removeAttribute('aria-busy');
+  const first = box.querySelector('.dir, [data-act="browse-use"], [data-act="browse-go"]');
+  if (first) first.focus();
+}
+function closeBrowser() {
+  const box = $('#browser'); if (box) { box.hidden = true; box.innerHTML = ''; }
+  const b = $('[data-act="browse-open"]'); if (b) b.focus();
+}
+function useBrowsedFolder() {
+  const f = $('#addform'); if (!f || !BR.path) return;
+  f.elements.path.value = BR.path;
+  if (!f.elements.name.value.trim()) f.elements.name.value = folderName(BR.path);
+  closeBrowser();
+  f.elements.kind.focus();
+}
+
 async function act(name, btn) {
   const L = S.lib;
   if (name === 'reload') { route({ keepScroll: true }); return; }
@@ -2146,6 +2198,10 @@ async function act(name, btn) {
     return;
   }
   if (name === 'add') { L.adding = true; L.justAdded = null; redraw('#addform input[name=name]'); return; }
+  if (name === 'browse-open') { browseTo(''); return; }
+  if (name === 'browse-go') { browseTo(btn.dataset.path || ''); return; }
+  if (name === 'browse-close') { closeBrowser(); return; }
+  if (name === 'browse-use') { useBrowsedFolder(); return; }
   if (name === 'cancel-add') { L.adding = false; redraw('[data-act="add"]'); return; }
   if (name === 'dismiss-added') { L.justAdded = null; redraw('[data-act="add"]'); return; }
   if (name === 'scan-all') { startScan(null); return; }

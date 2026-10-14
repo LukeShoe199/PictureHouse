@@ -49,6 +49,7 @@ OPEN_WRITES = [
 ]
 # Reads that are admin-only: they expose internals or spend API quota.
 ADMIN_READS = [
+    re.compile(r"^/api/browse$"),  # the server's folder names are private
     re.compile(r"^/api/logs$"),
     re.compile(r"^/api/devices$"),
     re.compile(r"^/api/settings/"),

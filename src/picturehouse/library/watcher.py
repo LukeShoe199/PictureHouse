@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 SETTLE_MS = 5_000  # quiet time before a batch of changes is acted on
 MAX_BATCH_MS = 60_000  # act at least this often during a long burst
-RECHECK_MS = 60_000  # how often to re-check which roots exist (offline ones may return)
+RECHECK_MS = 20_000  # how often to re-check which roots exist (USB drives come and go)
 
 
 def _relevant(change: watchfiles.Change, path: str) -> bool:
@@ -82,10 +82,22 @@ class FolderWatcher:
         return out
 
     def _run(self) -> None:
+        previous: set[str] | None = None
         while not self._stop.is_set():
             self._reload.clear()
             roots = self._roots()
             self.watching = roots
+            # A drive plugged in or out (or a share back online): scan those
+            # folders now, so they show as available/offline straight away
+            # rather than at the next periodic scan.
+            if previous is not None:
+                came, went = set(roots) - previous, previous - set(roots)
+                if came or went:
+                    log.info("library folders appeared: %s; disappeared: %s",
+                             ", ".join(sorted(came)) or "none",
+                             ", ".join(sorted(went)) or "none")  # fmt: skip
+                    self._scan(sorted(came | went), 0)
+            previous = set(roots)
             if not roots:
                 self._reload.wait(RECHECK_MS / 1000)
                 continue

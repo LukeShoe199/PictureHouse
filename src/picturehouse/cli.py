@@ -253,6 +253,32 @@ def library_remove(ctx: typer.Context, name: str) -> None:
     typer.echo(f"removed library {name!r}")
 
 
+@library_app.command("browse")
+@handles_errors
+def library_browse(
+    path: Annotated[str | None, typer.Argument(help="Folder to look inside")] = None,
+) -> None:
+    """Show folders on this computer, to find a library folder's path.
+
+    Without PATH: where to start (drives, media folders). In a container, the
+    paths are as the container sees them, which is what `library add` needs."""
+    from picturehouse.library import browse
+
+    if path is None:
+        for place in browse.roots():
+            typer.echo(f"{place.name:<28} {place.path}")
+        typer.echo("\nLook inside one with: picturehouse library browse PATH")
+        return
+    listing = browse.list_dir(path)
+    typer.echo(listing.path)
+    if not listing.dirs:
+        typer.echo("  (no folders inside)")
+    for d in listing.dirs:
+        typer.echo(f"  {d.path}")
+    if listing.truncated:
+        typer.echo(f"  ... (first {browse.MAX_ENTRIES} shown)")
+
+
 @library_app.command("list")
 @handles_errors
 def library_list(ctx: typer.Context) -> None:

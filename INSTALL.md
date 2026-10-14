@@ -239,9 +239,14 @@ PictureHouse from GitHub like any App Store app.
 
 Good to know:
 
-- **Your media folders are the paths ZimaOS shows in Files**, such as
-  `/DATA/Media/Movies`, `/DATA/Media/TV Shows`, `/DATA/Media/Music` and
-  `/DATA/Gallery`. External drives are under `/media/...`.
+- **Finding your media folders:** use **Browse…** in the Add folder form.
+  It shows the box's storage as PictureHouse sees it. Note that the names
+  ZimaOS's **Files** app shows aren't the real paths: the main drive
+  ("ZimaOS-HD") is `/DATA`, so its films are typically `/DATA/Media/Movies`,
+  and an external drive called "WD_SSD" is `/media/WD_SSD`.
+- **USB drives** can be plugged in while PictureHouse runs: its folders come
+  online within about 20 seconds, and show as offline when unplugged
+  (nothing is removed from the library).
 - **ZimaOS has its own simple DLNA server** (Settings → General → Developer
   mode → DLNA). It's off unless you turned it on. Leave it off, or your TV
   lists two servers.
@@ -285,10 +290,12 @@ Do this once, on whichever computer runs PictureHouse.
    **Library**, enter the admin PIN and press **Unlock**. To set or change
    the PIN on Windows or a Linux desktop, use Library → Admin access on that
    computer.
-3. **Add your folders.** Library → **Add folder**: give it a name, type the
-   folder's path (e.g. `D:\Media\Films`, `/home/you/Media/Films`,
-   `/DATA/Media/Movies`) and choose what it holds: Films, TV series, Music,
-   Home videos, Photos or Mixed. Add one for each kind of media.
+3. **Add your folders.** Library → **Add folder**: press **Browse…**, find
+   the folder and press **Use this folder**, or type its path, for example
+   `D:\Media\Films`, `/home/you/Media/Films` or `/DATA/Media/Movies`. Then
+   choose what it holds: Films, TV series, Music, Home videos, Photos or
+   Mixed. Add one for each kind of media. Folders on USB drives work too;
+   they show as offline while the drive is unplugged.
 4. **Posters and plot summaries (optional, free).** Create a free account at
    [themoviedb.org](https://www.themoviedb.org/signup), then under your
    account's **Settings → API** request an API key. Paste it in Library →

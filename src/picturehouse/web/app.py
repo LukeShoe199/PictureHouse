@@ -813,6 +813,21 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
 
     # ------------------------------------------------------------ library management
 
+    @api.get("/browse")
+    def browse_folders(path: str | None = None):
+        """Folders on the server, for the Add folder form's Browse button.
+        Without ``path``: where to start. Admin only (access.ADMIN_READS)."""
+        from dataclasses import asdict
+
+        from picturehouse.library import browse
+
+        if not path:
+            return {"roots": [asdict(p) for p in browse.roots()]}
+        try:
+            return asdict(browse.list_dir(path))
+        except browse.BrowseError as e:
+            raise HTTPException(400, e.message) from None
+
     @api.get("/libraries")
     def libraries():
         with svc.db.session() as s:

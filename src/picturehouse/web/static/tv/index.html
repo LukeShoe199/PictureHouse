@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PictureHouse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/static/tv/tv.css">
+</head>
+<body>
+<!-- Big-screen interface for the LG TV app (webOS 5 = Chrome 68: keep the
+     JavaScript ES2017 and the CSS free of flex gap, :is(), aspect-ratio). -->
+<header class="top" id="top">
+  <div class="brand"><span class="logo"></span>PictureHouse</div>
+  <nav class="tabs" id="tabs">
+    <button class="f tab" data-go="home">Home</button>
+    <button class="f tab" data-go="films">Films</button>
+    <button class="f tab" data-go="shows">TV</button>
+    <button class="f tab" data-go="music">Music</button>
+    <button class="f tab" data-go="photos">Photos</button>
+    <button class="f tab" data-go="videos">Videos</button>
+    <button class="f tab" data-go="search">Search</button>
+    <button class="f tab" data-go="settings">Settings</button>
+    <button class="f tab nowpill" id="nowpill" data-act="nowplaying" hidden><span class="eq"><i></i><i></i><i></i></span><span id="nowpillt">Now playing</span></button>
+  </nav>
+  <div class="clock" id="clock"></div>
+</header>
+<main id="app" class="app"></main>
+
+<div class="player" id="player" hidden>
+  <video id="video" preload="auto"></video>
+  <div class="osd" id="osd">
+    <div class="osd-top"><div class="osd-title" id="ptitle"></div><div class="osd-sub" id="psub"></div></div>
+    <div class="osd-msg" id="pmsg" hidden></div>
+    <div class="osd-bottom">
+      <div class="bar"><i id="pbuf"></i><b id="pbar"></b></div>
+      <div class="times"><span id="pcur">0:00</span><span id="ptot">0:00</span></div>
+      <div class="ctl vctl" id="vctl">
+        <button class="cbtn" data-v="back"><svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg><span>◀ 10 s</span></button>
+        <button class="cbtn big" data-v="toggle" id="vtoggle"><svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg><span>OK</span></button>
+        <button class="cbtn" data-v="fwd"><svg viewBox="0 0 24 24"><path d="M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z"/></svg><span>30 s ▶</span></button>
+        <button class="cbtn" data-v="next" id="vnext" hidden><svg viewBox="0 0 24 24"><path d="M6 6l9 6-9 6zM18 6v12"/></svg><span>Next ⏩</span></button>
+        <button class="cbtn" data-v="stop"><svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg><span>Back</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="audio" preload="auto"></audio>
+
+<!-- Music: now playing with the visualiser (media.js) -->
+<div class="np" id="np" hidden>
+  <canvas id="npviz"></canvas>
+  <div class="np-info"><div class="np-t" id="npt"></div><div class="np-a" id="npa"></div>
+    <div class="bar np-bar"><b id="npbar"></b></div>
+    <div class="times"><span id="npcur">0:00</span><span id="nptot">0:00</span></div>
+    <div class="ctl" id="npctl"></div></div>
+  <div class="osd-msg" id="npmsg" hidden></div>
+</div>
+
+<!-- Photos: viewer and slideshow (media.js) -->
+<div class="pview" id="pview" hidden>
+  <div class="pview-stage" id="pstage"></div>
+  <div class="pview-info" id="pinfo"><div class="osd-title" id="pvtitle"></div><div class="osd-sub" id="pvsub"></div>
+    <div class="ctl" id="pctl"></div><div class="pvmusic" id="pvmusic"></div></div>
+</div>
+
+<!-- Music is playing: a small visualiser in the corner (media.js) -->
+<div class="miniviz" id="miniviz" hidden><i></i><i></i><i></i><i></i><i></i></div>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/static/shared/slideshow.js"></script>
+<script src="/static/shared/visualizer.js"></script>
+<script src="/static/tv/tv.js"></script>
+<script src="/static/tv/media.js"></script>
+</body>
+</html>

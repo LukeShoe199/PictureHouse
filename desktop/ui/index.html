@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PictureHouse</title>
+<style>
+  :root { color-scheme: dark; --bg: #0a0d11; --fg: #eef1f4; --muted: #93a0b0; --accent: #f2b33d;
+          --ink: #1b1305; --bad: #e5605c; --surface: #121821; --line: #243041; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg);
+               font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+  body { display: grid; place-items: center; padding: 24px; }
+  .box { width: min(520px, 100%); text-align: center; display: grid; gap: 18px; justify-items: center; }
+  .logo { width: 72px; height: 72px; border-radius: 18px; background: var(--accent); color: var(--ink);
+          display: grid; place-items: center; font: 900 26px/1 "Segoe UI", sans-serif; letter-spacing: .02em; }
+  h1 { margin: 0; font-size: 22px; font-weight: 700; }
+  p { margin: 0; color: var(--muted); }
+  .bar { width: 220px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; width: 40%; height: 100%; background: var(--accent); animation: slide 1.2s ease-in-out infinite; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  .err { display: none; text-align: left; width: 100%; background: var(--surface); border: 1px solid var(--line);
+         border-radius: 12px; padding: 14px 16px; }
+  .err b { color: var(--bad); }
+  .err pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.45 Consolas, monospace; color: var(--muted); margin: 8px 0 0; }
+  body.failed .bar { display: none; }
+  body.failed .err { display: block; }
+  @media (prefers-reduced-motion: reduce) { .bar i { animation: none; width: 100%; } }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="logo" aria-hidden="true">PH</div>
+    <h1>PictureHouse</h1>
+    <p id="msg">Starting the media server…</p>
+    <div class="bar" role="progressbar" aria-label="Starting"><i></i></div>
+    <div class="err" role="alert"><b id="errTitle">The server didn't start</b><pre id="errBody"></pre>
+      <p style="margin-top:10px">Use the PictureHouse icon in the system tray to open the logs or restart the server.</p></div>
+  </div>
+<script>
+  // Called by the desktop app (Rust) while it starts or watches the server.
+  window.phStatus = (text) => { document.getElementById('msg').textContent = text; };
+  window.phError = (title, body) => {
+    document.getElementById('errTitle').textContent = title;
+    document.getElementById('errBody').textContent = body || '';
+    document.body.classList.add('failed');
+  };
+</script>
+</body>
+</html>

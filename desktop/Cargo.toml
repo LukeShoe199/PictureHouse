@@ -1,0 +1,43 @@
+[package]
+name = "picturehouse-desktop"
+version = "0.1.0"
+description = "PictureHouse desktop app: window, tray icon and server manager"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "PictureHouse"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+# Versions pinned to releases at least two weeks old when this was written.
+tauri = { version = "=2.11.6", features = ["tray-icon", "image-png"] }
+# Tauri's internal crates float independently; pin the set released with 2.11.6
+# so a newer runtime can't be mixed with this tauri (that fails to compile).
+tauri-runtime = "=2.11.3"
+tauri-runtime-wry = "=2.11.4"
+tauri-utils = "=2.9.3"
+tauri-macros = "=2.6.3"
+tauri-codegen = "=2.6.3"
+tauri-plugin-single-instance = "=2.4.5"
+tauri-plugin-autostart = "=2.5.1"
+tauri-plugin-opener = "=2.5.5"
+reqwest = { version = "=0.13.5", default-features = false, features = ["blocking", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "=0.2.190"
+
+[target.'cfg(windows)'.dependencies]
+win32job = "=2.0.3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+panic = "abort"

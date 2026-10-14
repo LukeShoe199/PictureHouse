@@ -1,0 +1,85 @@
+# picturehouse configuration
+#
+# This file lives in the data directory (see `picturehouse config path`).
+# Windows paths: use single-quoted literal strings so backslashes are kept,
+#   e.g.  path = 'D:\Media\Films'   or   path = '\\nas\media\Films'
+
+[server]
+# Name shown on TVs and DLNA clients.
+friendly_name = "PictureHouse"
+host = "0.0.0.0"
+http_port = 9595
+# HTTPS for phones and tablets: casting to a Chromecast and installing the
+# app need it. Uses a local certificate authority (see the console's Library
+# page to install it on a phone). 0 turns it off. TVs always use http_port.
+https_port = 9596
+
+[ffmpeg]
+# Leave empty to find ffmpeg/ffprobe on the system PATH. Either a full path to
+# the executable or the folder containing it.
+ffmpeg_path = ""
+ffprobe_path = ""
+# Seconds before a single ffprobe call is abandoned (the file is recorded as
+# failed, the scan continues).
+probe_timeout_s = 30
+# How many videos may be converted (transcoded) at the same time. Each one
+# keeps several CPU cores busy; more viewers than this are told the server is
+# busy instead of everyone stuttering. Direct play is never limited. 0 = no limit.
+max_transcodes = 2
+
+[metadata]
+# Titles, plots and artwork from The Movie Database. Get a free key at
+# https://www.themoviedb.org/settings/api (either the API key or the read access
+# token works). Without a key, .nfo files and file names are used.
+tmdb_api_key = ""
+# Fallback when TMDb isn't set up or finds nothing: OMDb (IMDb data). Free key
+# (about 1,000 requests a day) at https://www.omdbapi.com/apikey.aspx
+omdb_api_key = ""
+language = "en-GB"
+region = "GB"            # which country's age certificates to show
+match_on_scan = true
+# Save a local copy of each match next to the media: <film>.nfo,
+# <film>-poster.jpg / -fanart.jpg, tvshow.nfo + poster.jpg in series folders.
+# Kodi/Jellyfin read them too, and PictureHouse reads them back after a
+# reinstall or without internet. Off by default: it writes into media folders
+# (never over files it didn't write itself).
+save_local = false
+
+[dlna]
+# Announce the server to TVs and DLNA apps on the local network (SSDP, UDP 1900).
+enabled = true
+# TV on Wi-Fi keeps buffering? Videos above this many Mbit/s are converted to
+# fit (uses a transcode slot, see [ffmpeg] max_transcodes). Around 12 suits
+# most Wi-Fi TVs. 0 = send original files whenever the TV can play them.
+max_bitrate_mbps = 0
+
+[scan]
+on_startup = true        # incremental scan when the server starts
+interval_minutes = 360   # incremental rescan every N minutes while running; 0 = off
+watch = true             # notice new/changed files within seconds (rescan is the backstop)
+audio_check = true       # flag films/episodes whose sound looks broken (e.g. missing dialogue)
+
+[logging]
+level = "INFO"          # level written to the log file
+console_level = "INFO"  # level printed to the console
+max_bytes = 10_000_000  # rotate the log file at this size
+backup_count = 5        # rotated files kept
+
+# Library roots. Each root has a unique name; items are stored relative to it,
+# so moving the files to a new host only means changing `path` here.
+# kind: films | tv | music | home_videos | mixed
+#
+# [[libraries]]
+# name = "Films"
+# path = 'D:\Media\Films'
+# kind = "films"
+#
+# [[libraries]]
+# name = "TV"
+# path = 'D:\Media\TV'
+# kind = "tv"
+#
+# [[libraries]]
+# name = "Music"
+# path = 'D:\Media\Music'
+# kind = "music"

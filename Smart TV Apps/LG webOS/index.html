@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PictureHouse</title>
+<style>
+  /* The launcher: finds the PictureHouse server, then opens its TV interface
+     (http://server:9595/tv/). Everything else lives on the server, so the
+     TV app rarely needs reinstalling. Chrome 68: keep it plain. */
+  html { font-size: calc(100vw / 96); }
+  html, body { margin: 0; height: 100%; background: #0a0d11; color: #eef1f4; overflow: hidden;
+    font: 1.3rem/1.5 "Segoe UI", Arial, sans-serif; }
+  .wrap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 60rem; text-align: center; }
+  .logo { width: 6rem; height: 6rem; border-radius: 1.3rem; background: #f2b33d; margin: 0 auto 2rem; position: relative; }
+  .logo:after { content: ""; position: absolute; left: 2.3rem; top: 1.6rem; border-style: solid;
+    border-width: 1.4rem 0 1.4rem 2.1rem; border-color: transparent transparent transparent #1b1305; }
+  h1 { font-size: 3rem; margin: 0 0 1rem; letter-spacing: .02em; }
+  p { color: #93a0b0; margin: .5rem 0; }
+  .spinner { display: inline-block; width: 1.6rem; height: 1.6rem; border-radius: 50%; vertical-align: middle;
+    border: .25rem solid rgba(255,255,255,.2); border-top-color: #f2b33d; animation: spin 1s linear infinite; margin-right: .8rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .list { margin: 2rem 0 0; }
+  .f { display: block; width: 100%; margin: 0 0 1rem; padding: 1rem 1.5rem; border: 0; border-radius: .7rem;
+    background: #19212c; color: #eef1f4; font: inherit; text-align: left; outline: none; }
+  .f.on { background: #f2b33d; color: #1b1305; }
+  .f small { display: block; opacity: .75; font-size: 1rem; }
+  input.f { text-align: center; font-size: 1.6rem; }
+  .err { color: #e5605c; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"></div>
+  <h1>PictureHouse</h1>
+  <div id="body"><p><span class="spinner"></span>Looking for your PictureHouse server…</p></div>
+</div>
+<script src="launcher.js"></script>
+</body>
+</html>

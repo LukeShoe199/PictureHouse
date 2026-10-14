@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PictureHouse runs on the home network over plain http (http://192.168.x.x:9595).
+     LAN addresses can't be listed in advance, so cleartext is allowed; the app only
+     talks to the server the user picked, and opens everything else in the browser. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <!-- Lets the app use the server's HTTPS address once the user has
+                 installed the PictureHouse certificate on the phone. -->
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

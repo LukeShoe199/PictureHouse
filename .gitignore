@@ -1,0 +1,42 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Generated fixture media (rebuilt by tests or scripts/build_fixtures.py)
+tests/.fixture-media/
+
+# Local runtime data if pointed inside the repo
+.picturehouse-data/
+
+# Local real-world test media (large, copyrighted) — never commit
+/test media/
+
+# Rust build output
+/desktop/target/
+
+# Packaging output
+/dist/
+/build/
+
+# Android build output and machine-specific files
+/Android APK/.gradle/
+/Android APK/.kotlin/
+/Android APK/build/
+/Android APK/app/build/
+/Android APK/local.properties
+# Built APK offered by the server (Android APK/build_android.py)
+/src/picturehouse/web/static/downloads/
+
+# Large local resources (OS images etc.), never committed
+/resources/
+
+# Private development notes (kept locally, not published)
+/HANDOVER.md
+/CLAUDE.md
+/docs/development-plan.md
+/docs/tv-testing.md

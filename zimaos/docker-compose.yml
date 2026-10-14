@@ -1,0 +1,99 @@
+# PictureHouse for ZimaOS (and CasaOS): import this in the ZimaOS dashboard
+# with App Store -> Custom Install -> Import (see zimaos/README.md).
+# Works with plain Docker Compose too:  docker compose up -d
+name: picturehouse
+services:
+  picturehouse:
+    image: ghcr.io/lukeshoe199/picturehouse:0.1.0
+    container_name: picturehouse
+    # Host networking: TVs find PictureHouse by DLNA (SSDP multicast, UDP
+    # 1900), which Docker's bridge network doesn't pass. The web console is
+    # then on the ZimaOS address, port 9595.
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      # Your own 4 to 12 digits: REQUIRED. No browser ever counts as "the PC
+      # running PictureHouse" on a NAS, so folders and settings are changed
+      # after entering this PIN in the console (Library page).
+      PICTUREHOUSE_ADMIN_PIN: ""
+      # Shown in the console's "Add folder" form as the place to look.
+      PICTUREHOUSE_MEDIA_HINT: /DATA
+      TZ: Europe/London
+    volumes:
+      # PictureHouse's own data: database, settings, artwork and caches.
+      - type: bind
+        source: /DATA/AppData/picturehouse
+        target: /data
+        # Created if missing (ZimaOS does this anyway; plain Docker Compose
+        # only does with this setting, for this long form).
+        bind:
+          create_host_path: true
+      # Your files, read-only, at the same paths ZimaOS shows in Files.
+      # (To let the opt-in "save a copy next to the files" write .nfo files,
+      # remove "read_only: true".)
+      - type: bind
+        source: /DATA
+        target: /DATA
+        read_only: true
+      - type: bind
+        source: /media
+        target: /media
+        read_only: true
+        bind:
+          create_host_path: true
+    x-casaos:
+      envs:
+        - container: PICTUREHOUSE_ADMIN_PIN
+          description:
+            en_us: Admin PIN (4 to 12 digits) for changing folders and settings from the console.
+        - container: TZ
+          description:
+            en_us: Time zone.
+      volumes:
+        - container: /data
+          description:
+            en_us: PictureHouse data (database, artwork, caches).
+        - container: /DATA
+          description:
+            en_us: Your ZimaOS storage, read-only (add folders from here, e.g. /DATA/Media/Films).
+        - container: /media
+          description:
+            en_us: External drives, read-only.
+      ports:
+        - container: "9595"
+          description:
+            en_us: Web console and streaming (HTTP).
+        - container: "9596"
+          description:
+            en_us: HTTPS for phones (casting, installing the app).
+        - container: "1900"
+          protocol: udp
+          description:
+            en_us: DLNA discovery for TVs.
+
+x-casaos:
+  architectures:
+    - amd64
+  main: picturehouse
+  author: PictureHouse
+  developer: PictureHouse
+  category: Media
+  title:
+    en_us: PictureHouse
+  tagline:
+    en_us: Your films, TV, music and photos on every screen at home.
+  description:
+    en_us: >-
+      A home media server: organises films, series, music, audiobooks and
+      photos from your folders, fetches posters and plots, plays to TVs over
+      DLNA and the LG TV app, to phones and browsers, and converts on the fly
+      when a device can't play a file as it is.
+  index: /
+  port_map: "9595"
+  scheme: http
+  tips:
+    before_install:
+      en_us: >-
+        Set PICTUREHOUSE_ADMIN_PIN below (4 to 12 digits of your choice)
+        before installing. You'll enter it in the console (Library page) to
+        add your media folders.

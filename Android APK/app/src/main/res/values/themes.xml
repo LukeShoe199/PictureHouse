@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PictureHouse" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:colorAccent">@color/accent</item>
+    </style>
+    <color name="bg">#FF0A0D11</color>
+    <color name="surface">#FF121821</color>
+    <color name="fg">#FFEEF1F4</color>
+    <color name="muted">#FF93A0B0</color>
+    <color name="accent">#FFF2B33D</color>
+    <color name="ink">#FF1B1305</color>
+</resources>

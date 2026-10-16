@@ -1664,6 +1664,7 @@ function closePlayer(silent) {
   detachLocal(p);
   closeHls(p.sid);
   pmsg(null); castBox();
+  if (fsElement()) exitFs();
   PL.hidden = true; PL.classList.remove('has-video', 'idle', 'remote');
   document.body.classList.remove('player-open');
   clearTimeout(idleT);
@@ -1733,6 +1734,46 @@ V.addEventListener('error', async () => {
 });
 // Touch taps are handled below (show/hide controls, double-tap to seek); only mouse clicks toggle play.
 V.addEventListener('click', () => { if (lastPointer !== 'touch') togglePlay(); });
+
+/* Full screen: the whole player (controls included) fills the screen. Browsers,
+   the Windows/Linux app (its window goes full screen with the page) and the
+   Android app (immersive: no status or navigation bar) all honour the standard
+   request; an iPhone only lets the <video> itself go full screen. */
+const FS_ICONS = { on: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
+  off: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>' };
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+function exitFs() {
+  const ex = document.exitFullscreen || document.webkitExitFullscreen;
+  if (ex) { try { const r = ex.call(document); if (r && r.catch) r.catch(() => {}); } catch (e) { /* already out */ } }
+}
+async function toggleFullscreen() {
+  if (fsElement()) { exitFs(); return; }
+  const req = PL.requestFullscreen || PL.webkitRequestFullscreen;
+  try {
+    if (req) {
+      await req.call(PL, { navigationUI: 'hide' });
+      // Phones: turn a landscape film sideways too (allowed only once full screen).
+      if (V.videoWidth > V.videoHeight && screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    } else if (V.webkitEnterFullscreen) {
+      V.webkitEnterFullscreen();  // iPhone: the video alone, in the system player
+    } else {
+      toast('This browser can\'t go full screen.');
+    }
+  } catch (e) { toast('Full screen was blocked by the browser.'); }
+}
+function fsChanged() {
+  const on = fsElement() === PL;
+  PL.classList.toggle('fs', on);
+  const b = $('#pfs');
+  b.innerHTML = on ? FS_ICONS.on : FS_ICONS.off;
+  b.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+  b.title = on ? 'Exit full screen (F)' : 'Full screen (F)';
+  if (!on && screen.orientation && screen.orientation.unlock) { try { screen.orientation.unlock(); } catch (e) { /* not locked */ } }
+}
+document.addEventListener('fullscreenchange', fsChanged);
+document.addEventListener('webkitfullscreenchange', fsChanged);
+// Mouse: double-click the picture. (Touch double-taps seek instead.)
+V.addEventListener('dblclick', () => { if (lastPointer !== 'touch') toggleFullscreen(); });
 setInterval(() => { if (isPlaying()) saveProgress(false); }, 10000);
 window.addEventListener('pagehide', () => { if (P) { saveProgress(true); closeHls(P.sid); } });
 
@@ -2101,6 +2142,7 @@ document.addEventListener('click', e => {
   else if (t.id === 'pplay') togglePlay();
   else if (t.id === 'pback') seekTo(curPos() - 10);
   else if (t.id === 'pfwd') seekTo(curPos() + 30);
+  else if (t.id === 'pfs') toggleFullscreen();
   else if (t.id === 'psub') { p.sub = (p.sub + 1) % p.subs.length; $('#psubv').textContent = p.subs[p.sub]; updateInfo(); }
   else if (t.id === 'paud') cycleAudio();
   else if (t.id === 'pair') { try { V.webkitShowPlaybackTargetPicker(); } catch (er) { toast('AirPlay is not available'); } }
@@ -2397,6 +2439,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.key === ' ' && playerOpen && tag !== 'button' && !typing) { togglePlay(); e.preventDefault(); }
+  if ((e.key === 'f' || e.key === 'F') && playerOpen && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { toggleFullscreen(); e.preventDefault(); }
 });
 
 /* ---------- Start ---------- */

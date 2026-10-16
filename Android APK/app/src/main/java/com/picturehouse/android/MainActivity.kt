@@ -4,9 +4,11 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -20,6 +22,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
+import android.window.OnBackInvokedDispatcher
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -71,6 +74,13 @@ class MainActivity : Activity() {
         root.addView(connect, FrameLayout.LayoutParams(MATCH, MATCH))
         setContentView(root)
         applyInsets()
+        // Android 13+: back gestures go to this callback (on Android 16 with
+        // predictive back, onBackPressed below is never called for them).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+            ) { if (!handleBack()) finish() }
+        }
 
         if (savedInstanceState != null && web.restoreState(savedInstanceState) != null) {
             serverBase = prefs.getString(KEY_SERVER, null)
@@ -101,13 +111,18 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    @Deprecated("Activity back handling; fine for API 26+ without AndroidX")
+    /** Back: leave full screen, then go back in the console, then leave the app. */
+    private fun handleBack(): Boolean = when {
+        fullscreenView != null -> { exitFullscreen(); true }
+        web.visibility == View.VISIBLE && web.canGoBack() -> { web.goBack(); true }
+        else -> false
+    }
+
+    // Gestures on Android 13+ are handled by the OnBackInvokedCallback in onCreate.
+    @SuppressLint("GestureBackNavigation")
+    @Deprecated("Back button/gesture before Android 13 (and 13-15 without predictive back)")
     override fun onBackPressed() {
-        when {
-            fullscreenView != null -> exitFullscreen()
-            web.visibility == View.VISIBLE && web.canGoBack() -> web.goBack()
-            else -> @Suppress("DEPRECATION") super.onBackPressed()
-        }
+        if (!handleBack()) @Suppress("DEPRECATION") super.onBackPressed()
     }
 
     // ------------------------------------------------------------------ web view
@@ -156,6 +171,8 @@ class MainActivity : Activity() {
                 fullscreenCallback = callback
                 root.addView(view, FrameLayout.LayoutParams(MATCH, MATCH))
                 setSystemBarsHidden(true)
+                // Films are wide: turn sideways (either way round) while full screen.
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             }
 
             override fun onHideCustomView() = exitFullscreen()
@@ -170,15 +187,30 @@ class MainActivity : Activity() {
         fullscreenCallback?.onCustomViewHidden()
         fullscreenCallback = null
         setSystemBarsHidden(false)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
+    /** Immersive full screen: no status bar or navigation bar (a swipe from
+     *  the edge shows them briefly). Android 11+ API, else the older flags:
+     *  the app supports Android 8, where insetsController doesn't exist. */
     private fun setSystemBarsHidden(on: Boolean) {
-        val c = window.insetsController ?: return
-        if (on) {
-            c.hide(WindowInsets.Type.systemBars())
-            c.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val c = window.insetsController ?: return
+            if (on) {
+                c.hide(WindowInsets.Type.systemBars())
+                c.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                c.show(WindowInsets.Type.systemBars())
+            }
         } else {
-            c.show(WindowInsets.Type.systemBars())
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = if (on) {
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            } else {
+                0
+            }
         }
     }
 
@@ -186,8 +218,14 @@ class MainActivity : Activity() {
     private fun applyInsets() {
         root.setOnApplyWindowInsetsListener { v, insets ->
             if (fullscreenView == null) {
-                val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
-                v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
+                    v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+                } else {
+                    @Suppress("DEPRECATION")
+                    v.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop,
+                        insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
+                }
             } else {
                 v.setPadding(0, 0, 0, 0)
             }

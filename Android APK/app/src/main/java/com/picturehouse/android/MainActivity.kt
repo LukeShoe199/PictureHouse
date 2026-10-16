@@ -277,7 +277,9 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
-        fun version(): String = BuildConfigInfo.VERSION
+        // The real installed version (set from PictureHouse's version at build time).
+        fun version(): String =
+            runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "0.0.0"
     }
 
     private fun openExternal(url: String, mime: String?, title: String? = null, positionMs: Long = 0) {
@@ -459,8 +461,4 @@ class MainActivity : Activity() {
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
     }
-}
-
-object BuildConfigInfo {
-    const val VERSION = "0.1.0"
 }

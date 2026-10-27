@@ -1478,9 +1478,10 @@ function phonesHTML(st) {
     <div><a class="btn small" href="${esc(certHref)}" data-nav>${ico('download')} Download certificate</a></div>
     <div class="steps">
       <div><b>iPhone and iPad</b><ol>
-        <li>Open the certificate link in Safari and allow the download.</li>
-        <li>Settings → General → VPN &amp; Device Management → install the profile.</li>
-        <li>Settings → General → About → Certificate Trust Settings → turn on full trust for “PictureHouse local CA”.</li></ol></div>
+        <li>Open the certificate link in Safari and allow it.</li>
+        <li>Install the profile: iOS 12 and earlier show the installer straight away; newer iOS: Settings → General → VPN &amp; Device Management (or Profiles).</li>
+        <li>iOS 10.3 and later: Settings → General → About → Certificate Trust Settings → turn on full trust for “PictureHouse local CA”.</li></ol>
+        <p class="note">Older iPads don't need this: the secure address is only for casting and installing the app, which need iOS 11.3 or later.</p></div>
       <div><b>Android</b><ol>
         <li>Download the certificate.</li>
         <li>Settings → Security → More security settings → Encryption &amp; credentials → Install a certificate → CA certificate, then pick the file.</li></ol></div>

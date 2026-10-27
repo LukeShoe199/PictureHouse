@@ -57,6 +57,11 @@ def test_pwa_routes_and_https_status(media_library, tmp_path):
         ca = c.get("/ca.crt")
         assert ca.status_code == 200 and b"BEGIN CERTIFICATE" in ca.content
         assert "ca.key" not in ca.text and b"PRIVATE" not in ca.content
+        # Opened, not saved: Safari before iOS 13 can't download files, only
+        # open a certificate (which starts the profile installer).
+        assert ca.headers["content-type"] == "application/x-x509-ca-cert"
+        assert ca.headers["content-disposition"].startswith("inline;")
+        assert 'filename="PictureHouse-CA.crt"' in ca.headers["content-disposition"]
     with TestClient(create_app(svc), **LOCAL) as c:
         assert c.get("/api/status").json()["https"] == {"enabled": False}
         assert c.get("/ca.crt").status_code == 404

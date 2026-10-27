@@ -1346,9 +1346,11 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     def ca_cert():
         if not https:
             raise HTTPException(404, "HTTPS is off")
-        # iOS/Android install a CA from a download with this type.
+        # iOS/Android install a CA from a download with this type. "inline", not an
+        # attachment: Safari before iOS 13 has no downloads at all and can only
+        # *open* it, which starts the profile installer; others still save it.
         return FileResponse(https["files"].ca_cert, media_type="application/x-x509-ca-cert",
-                            filename="PictureHouse-CA.crt")  # fmt: skip
+                            filename="PictureHouse-CA.crt", content_disposition_type="inline")  # fmt: skip
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
     def manifest():

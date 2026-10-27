@@ -77,7 +77,11 @@ TOKENS: dict[str, Token] = {
     "radius.panel": Token("--r-panel", "length", "12px", "Panel, menu and dialog corners"),
     "radius.hero": Token("--r-hero", "length", "14px", "Big banner (hero) corners"),
 }  # fmt: skip
-LAYOUT = {"nav": ("rail", "top")}  # first value is the default
+# Layout options: each non-default value adds layouts/<option>-<value>.css.
+LAYOUT = {
+    "nav": ("rail", "top", "floating"),
+    "hero": ("card", "full-bleed"),
+}  # first value is the default
 
 _SAFE = {
     "color": re.compile(r"^[#a-zA-Z0-9(),.%\s/+-]{1,120}$"),

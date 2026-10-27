@@ -1,0 +1,42 @@
+/* Layout option "nav": "floating" — the navigation is a capsule floating over
+   the page: centred at the top on computers, just above the bottom edge on
+   phones. Its height is the size.navigation token. The search / "Play to" row
+   floats too (over a full-bleed hero, if the theme has one): under the
+   capsule on mid-size screens, beside it on wide ones. The logo isn't shown
+   on computers (a glass capsule can't hold a fixed-position child; the
+   capsule is the brand). */
+@media (min-width: 761px) {
+  :root {
+    --ph-nav-top: calc(16px + env(safe-area-inset-top, 0px));
+    --ph-main-top: calc(var(--ph-nav-top) + var(--rail) + 76px);  /* capsule + floating search row */
+    --ph-hero-pull: var(--ph-main-top);
+  }
+  .rail { top: var(--ph-nav-top); right: 0; bottom: auto; left: 0; margin-inline: auto;
+    width: fit-content; max-width: calc(100vw - 2 * var(--gut)); height: var(--rail); padding: 4px;
+    flex-direction: row; justify-content: center; align-items: stretch; gap: 2px;
+    border: 1px solid var(--line); border-radius: 999px; }
+  .rail .logo, .rail .spacer { display: none; }
+  .navbtn { width: auto; flex-direction: row; gap: 7px; padding: 0 16px; border-radius: 999px; font-size: 14px; letter-spacing: 0; }
+  .navbtn .ico { width: 18px; height: 18px; }
+  .main { position: relative; margin-left: 0; padding-top: var(--ph-main-top); }
+  .top { position: absolute; z-index: 16; top: calc(var(--ph-nav-top) + var(--rail) + 14px); left: var(--gut); right: var(--gut); padding: 0; }
+}
+@media (min-width: 1600px) {
+  :root { --ph-main-top: calc(var(--ph-nav-top) + var(--rail) + 20px); }
+  .top { position: fixed; top: var(--ph-nav-top); left: auto; right: var(--gut); z-index: 21; height: var(--rail); flex-wrap: nowrap; }
+  .top .search { flex: 0 0 240px; height: var(--rail); }
+  .top .srv { display: none; }
+  .top .devbtn { height: var(--rail); }
+}
+@media (max-width: 760px) {
+  /* The search / "Play to" row floats over the top of the page as well. */
+  :root { --ph-main-top: calc(env(safe-area-inset-top, 0px) + 116px); --ph-hero-pull: var(--ph-main-top); }
+  .main { position: relative; padding-top: var(--ph-main-top); }
+  .top { position: absolute; z-index: 16; top: calc(env(safe-area-inset-top, 0px) + 12px); left: var(--gut); right: var(--gut); padding: 0; }
+  .rail { left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); padding: 4px;
+    border: 1px solid var(--line); border-radius: 999px; }
+  .navbtn { border-radius: 999px; }
+  .main { padding-bottom: 130px; }
+  .mini { bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); }
+  .toast { bottom: 110px; }
+}

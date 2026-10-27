@@ -268,7 +268,16 @@ document.addEventListener('error', e => {
   el.dataset.gen = '1'; el.removeAttribute('loading');
   el.src = genArt(el.dataset.seed, el.dataset.k);
   const box = el.closest('.art'); if (box) box.classList.add('gen');
+  if (el.matches('.hero-img, .d-back img')) updateAmbient();
 }, true);
+
+/* Themes can tint the page with the artwork on screen (docs/themes.md):
+   --ph-ambient is the banner or backdrop image as a CSS url(), or none. */
+function updateAmbient() {
+  const img = document.querySelector('#view .hero-img, #view .d-back img');
+  const src = img && img.getAttribute('src');
+  document.documentElement.style.setProperty('--ph-ambient', src ? `url(${JSON.stringify(src)})` : 'none');
+}
 
 /* ---------- State ---------- */
 const S = {
@@ -1243,6 +1252,7 @@ function drawCurrent() {
   const v = $('#view');
   try { v.innerHTML = S.current.def.draw(S.current.data); }
   catch (e) { console.error(e); v.innerHTML = errorView(new Error('This view failed to draw: ' + e.message)); }
+  updateAmbient();
 }
 function redraw(focus) { if (!S.current) return; drawCurrent(); if (focus) focusSel(focus); }
 function focusKey(el) {

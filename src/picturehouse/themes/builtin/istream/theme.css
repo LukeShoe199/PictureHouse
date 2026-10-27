@@ -1,65 +1,152 @@
-/* iStream: an Apple TV-inspired look for PictureHouse.
-   Tokens (theme.json) set the colours, fonts and rounding; this file adds what
-   tokens can't say: glass, type style and the tvOS "lift" on focus. */
+/* iStream — liquid glass, inspired by Apple TV.
+   theme.json sets colours, type and shape and asks for the floating capsule
+   navigation and edge-to-edge hero. This file is the material and the motion:
+   translucent glass that picks up the artwork behind it, light catching its
+   edges, and springy, physical responses. */
 
-body { background: radial-gradient(1200px 700px at 50% -20%, #1d1d23 0%, #000 62%) fixed, #000; }
-
-/* ---- Top bar: frosted glass, pill tabs ---- */
-.rail { background: color-mix(in srgb, var(--bg-rail) 70%, transparent);
-  -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); }
-.navbtn { color: var(--muted); font-weight: 600; transition: background .2s, color .2s; }
-.navbtn:hover { color: var(--fg); background: rgba(255, 255, 255, .08); }
-.navbtn.on .ico { color: inherit; }
-@media (min-width: 761px) {
-  .navbtn.on { color: #000; background: var(--fg); }
+:root {
+  --spring: cubic-bezier(.34, 1.56, .64, 1);   /* overshoots a little, like a spring */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  /* The glass material, reused below. */
+  --glass-fill: linear-gradient(150deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .05) 55%, rgba(255, 255, 255, .09));
+  --glass-blur: blur(26px) saturate(190%) brightness(1.06);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, .34), inset 0 -1px 1px rgba(255, 255, 255, .06),
+    0 12px 32px rgba(0, 0, 0, .34);
+  /* The bright rim where light catches the glass edge (top-left strongest). */
+  --glass-rim: linear-gradient(150deg, rgba(255, 255, 255, .65), rgba(255, 255, 255, .12) 32%,
+    rgba(255, 255, 255, 0) 55%, rgba(255, 255, 255, .22));
 }
-.logo { background: var(--fg); color: #000; font: 800 15px/1 var(--display); font-stretch: normal; letter-spacing: -.03em; }
 
-/* ---- Type: the system font, sentence case, tight and bold ---- */
-.hero-title, .page-head h1, .d-title, .sec-head h2, .poster .ptitle, .ptop .pt b,
-.sheet-head h2, .pcast b, .stat b, .ep .n {
-  font-stretch: normal; text-transform: none; letter-spacing: -.022em; }
-.hero-title { font-weight: 700; font-size: clamp(40px, 5.6vw, 76px); line-height: 1.02; }
-.page-head h1 { font-weight: 700; font-size: clamp(32px, 4vw, 48px); line-height: 1.05; }
-.d-title { font-weight: 700; font-size: clamp(34px, 4.6vw, 60px); line-height: 1.04; }
-.sec-head h2 { font-weight: 700; font-size: 22px; }
+/* ---- The page takes on the colours of the artwork on screen ---- */
+body { background: #050507; }
+body::before { content: ""; position: fixed; inset: -12%; z-index: -1; pointer-events: none;
+  background: var(--ph-ambient, none) center / cover no-repeat, radial-gradient(1000px 700px at 30% 0%, #23232c, #050507 70%);
+  filter: blur(80px) saturate(1.7) brightness(.5); transform: translateZ(0); }
+body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(140% 90% at 50% 0%, transparent 40%, rgba(5, 5, 7, .75) 100%); }
+
+/* ---- Glass ---- */
+.rail, .logo, .search, .devbtn, .btn:not(.primary), .chip, .panel, .stat, .devmenu, .mini, .sheet-box,
+.theme, .toast, .browser, .pcast, .pinfo, .pmsg {
+  background: var(--glass-fill), var(--surface);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 0; box-shadow: var(--glass-shadow); }
+.btn, .chip, .search, .devbtn, .panel, .stat, .mini, .sheet-box, .theme, .browser { position: relative; }
+.rail::after, .logo::after, .search::after, .devbtn::after, .btn::after, .chip::after, .panel::after, .stat::after,
+.devmenu::after, .mini::after, .sheet-box::after, .theme::after, .browser::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: var(--glass-rim);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.rail { background: var(--glass-fill), var(--bg-rail); }
+.devmenu, .sheet-box { background: var(--glass-fill), var(--surface-2); }
+
+/* ---- Navigation capsule ---- */
+.navbtn { color: var(--muted); font-weight: 600; transition: color .25s var(--ease), background .35s var(--ease), transform .35s var(--spring); }
+.navbtn:hover { color: var(--fg); background: rgba(255, 255, 255, .08); }
+.navbtn.on { color: var(--fg); background: linear-gradient(160deg, rgba(255, 255, 255, .30), rgba(255, 255, 255, .12));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 0 14px rgba(255, 255, 255, .10), 0 4px 14px rgba(0, 0, 0, .25); }
+.navbtn.on .ico { color: inherit; }
+.navbtn:active { transform: scale(.94); }
+.logo { color: var(--fg); font: 800 15px/1 var(--display); font-stretch: normal; letter-spacing: -.03em; }
+
+/* ---- Type: big, bold, sentence case ---- */
+.hero-title, .page-head h1, .d-title, .sec-head h2, .poster .ptitle, .ptop .pt b, .sheet-head h2, .pcast b, .stat b, .ep .n {
+  font-stretch: normal; text-transform: none; letter-spacing: -.028em; }
+.hero-title { font-weight: 800; font-size: clamp(48px, 7vw, 108px); line-height: .98; text-shadow: 0 2px 30px rgba(0, 0, 0, .35); }
+.page-head h1 { font-weight: 800; font-size: clamp(34px, 4.4vw, 56px); line-height: 1.02; }
+.d-title { font-weight: 800; font-size: clamp(36px, 5vw, 68px); line-height: 1.0; text-shadow: 0 2px 30px rgba(0, 0, 0, .35); }
+.sec-head h2 { font-weight: 700; font-size: 24px; }
 .poster .ptitle { font-weight: 700; font-size: clamp(14px, 1.3vw, 17px); line-height: 1.12; }
-.ptop .pt b, .sheet-head h2 { font-weight: 700; }
-.stat b { font-weight: 700; }
-.eyebrow { color: var(--muted); letter-spacing: .08em; }
-.hero-syn, .d-syn { color: rgba(235, 235, 245, .8); }
+.ptop .pt b, .sheet-head h2, .stat b { font-weight: 700; }
+.eyebrow { color: rgba(255, 255, 255, .78); letter-spacing: .1em; }
+.hero-syn, .d-syn { color: rgba(235, 235, 245, .82); }
+.hero-body > * { animation: ist-rise .7s var(--ease) both; }
+.hero-body > :nth-child(2) { animation-delay: .06s; } .hero-body > :nth-child(3) { animation-delay: .12s; }
+.hero-body > :nth-child(4) { animation-delay: .18s; } .hero-body > :nth-child(5) { animation-delay: .24s; }
+@keyframes ist-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 
-/* ---- Artwork: rounded, and lifts towards you when chosen (tvOS) ---- */
-.card .art { box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
-  transition: transform .28s cubic-bezier(.2, .8, .2, 1), box-shadow .28s ease; }
-.card:hover .art, .card:focus-visible .art { transform: scale(1.06); box-shadow: 0 24px 48px rgba(0, 0, 0, .7); outline: none; }
+/* ---- Buttons: capsules; press gives a little, release springs back ---- */
+.btn { font-weight: 600; transition: transform .4s var(--spring), background .25s var(--ease), box-shadow .25s var(--ease); }
+.btn:hover:not(.primary) { background: var(--glass-fill), rgba(255, 255, 255, .16); }
+.btn:active, .chip:active, .pbtn:active, .card:active .art { transform: scale(.95); transition-duration: .12s; }
+.btn.primary { color: #000; background: linear-gradient(160deg, #fff, #e6e6eb); border: 0;
+  box-shadow: inset 0 1px 0 #fff, 0 10px 28px rgba(255, 255, 255, .16), 0 6px 18px rgba(0, 0, 0, .3); }
+.btn.primary:hover { background: linear-gradient(160deg, #fff, #f2f2f6); }
+.chip { color: var(--fg); }
+.chip.on { color: #000; background: linear-gradient(160deg, #fff, #e6e6eb); box-shadow: inset 0 1px 0 #fff; }
+.chip.on::after { display: none; }
+
+/* ---- Artwork: glass-edged, lifts and catches the light when chosen ---- */
+.card .art { box-shadow: 0 10px 26px rgba(0, 0, 0, .4);
+  transition: transform .5s var(--spring), box-shadow .4s var(--ease); }
+.card .art::before { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 0 0 1px rgba(255, 255, 255, .08); }
+.card .art::after { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, .26) 48%, transparent 64%);
+  transform: translateX(-130%); transition: transform 1s var(--ease); }
+.card:hover .art, .card:focus-visible .art { transform: translateY(-4px) scale(1.06); outline: none;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .12); }
+.card:hover .art::after, .card:focus-visible .art::after { transform: translateX(130%); }
 .card:focus-visible .cap b { color: var(--fg); }
-.playhint span { background: rgba(255, 255, 255, .95); color: #000; }
-.phthumb { border-radius: 8px; }
-.ep .thumb { border-radius: 10px; }
+.playhint { background: transparent; }
+.playhint span { background: rgba(255, 255, 255, .22); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5);
+  -webkit-backdrop-filter: blur(14px) saturate(180%); backdrop-filter: blur(14px) saturate(180%); }
+.prog { height: 5px; background: rgba(255, 255, 255, .22); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.phthumb { border-radius: 14px; }
+.ep { border-radius: 18px; }
+.ep .thumb { border-radius: 12px; }
+.ep:hover, .ep:focus-visible, .trk:hover, .trk:focus-visible { background: rgba(255, 255, 255, .07); }
+.ep:focus-visible, .trk:focus-visible { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); }
+.trk { border-radius: 14px; }
+.d-poster { border-radius: 22px; box-shadow: 0 30px 70px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 255, 255, .25); }
+
+/* ---- Back: a glass capsule over the backdrop ---- */
+.back { color: var(--fg); padding: 0 16px 0 10px; border-radius: 999px; background: var(--glass-fill), rgba(20, 20, 26, .4);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow);
+  transition: transform .4s var(--spring); }
+.back:hover { color: var(--fg); background: var(--glass-fill), rgba(255, 255, 255, .14); }
+.back:active { transform: scale(.95); }
 
 /* ---- Hero ---- */
-.hero { box-shadow: 0 30px 70px rgba(0, 0, 0, .55); }
+.hero-shade { background: linear-gradient(90deg, rgba(5, 5, 7, .7) 0%, rgba(5, 5, 7, .25) 45%, transparent 70%),
+  linear-gradient(0deg, rgba(5, 5, 7, .55) 0%, transparent 45%); }
+.dot { height: 6px; width: 6px; border-radius: 3px; background: rgba(255, 255, 255, .4); transition: width .45s var(--spring), background .3s; }
+.dot.on { width: 26px; background: #fff; }
 
-/* ---- Buttons and chips: white primary, frosted secondary ---- */
-.btn { border: 0; background: rgba(255, 255, 255, .14); font-weight: 600;
-  -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); }
-.btn:hover { background: rgba(255, 255, 255, .22); }
-.btn.primary, .btn.primary:hover { color: #000; background: var(--fg); }
-.chip { border-color: transparent; background: rgba(255, 255, 255, .08); color: var(--fg); }
-.chip.on { background: var(--fg); color: #000; }
+/* ---- Forms ---- */
+.field input, .field select, .field textarea { background: rgba(255, 255, 255, .07); border-color: rgba(255, 255, 255, .12); border-radius: 14px; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: rgba(255, 255, 255, .6); box-shadow: 0 0 0 4px rgba(255, 255, 255, .1); }
+.pill { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); }
 
-/* ---- Panels, menus and dialogs: glass ---- */
-.panel, .stat { background: rgba(255, 255, 255, .05); border-color: rgba(255, 255, 255, .07); }
-.devmenu, .mini, .sheet-box { background: rgba(36, 36, 40, .82); border-color: rgba(255, 255, 255, .1);
-  -webkit-backdrop-filter: blur(30px) saturate(170%); backdrop-filter: blur(30px) saturate(170%); }
-.search, .devbtn { background: rgba(255, 255, 255, .08); border-color: transparent; }
-.field input, .field select, .field textarea { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .1); }
-
-/* ---- Focus: a soft white ring instead of an outline ---- */
+/* ---- Focus: a soft glow, not an outline ---- */
 :focus-visible { outline-color: rgba(255, 255, 255, .9); }
-.btn:focus-visible, .chip:focus-visible, .navbtn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255, 255, 255, .85); }
+.btn:focus-visible, .chip:focus-visible, .navbtn:focus-visible, .search:focus-within, .devbtn:focus-visible {
+  outline: none; box-shadow: var(--glass-shadow), 0 0 0 3px rgba(255, 255, 255, .8); }
 
-/* ---- Player ---- */
+/* ---- Toast and menus float ---- */
+.toast { color: var(--fg); border-radius: 999px; padding: 12px 20px; }
+.devmenu { border-radius: 22px; }
+.devopt { border-radius: 14px; }
+
+/* ---- Player: floating glass controls over the picture ---- */
+.ptop { left: clamp(14px, 3vw, 32px); right: auto; top: calc(env(safe-area-inset-top, 0px) + 14px); padding: 6px 18px 6px 6px;
+  border-radius: 999px; background: var(--glass-fill), rgba(20, 20, 26, .45); box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); max-width: calc(100% - 28px); }
+.pctrl { left: clamp(14px, 3vw, 40px); right: clamp(14px, 3vw, 40px); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  padding: 14px clamp(14px, 2.4vw, 26px); border-radius: 30px; background: var(--glass-fill), rgba(20, 20, 26, .45);
+  box-shadow: var(--glass-shadow); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.ptop, .pctrl { transition: opacity .35s var(--ease), transform .45s var(--spring); }
+.player.idle .ptop { transform: translateY(-12px); }
+.player.idle .pctrl { transform: translateY(14px); }
+.pbtn { transition: transform .4s var(--spring), background .2s; }
+.pbtn:hover, .pbtn:focus-visible { background: rgba(255, 255, 255, .16); }
+.pbtn:focus-visible { box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); }
+.pbtn.big { color: #000; background: linear-gradient(160deg, #fff, #e6e6eb); box-shadow: inset 0 1px 0 #fff, 0 8px 22px rgba(0, 0, 0, .35); }
+.ptxt { border-radius: 999px; }
 .scrub input { accent-color: #fff; }
-.pbtn.big { background: #fff; color: #000; }
+.pinfo, .pcast, .pmsg { border-radius: 26px; }
+@media (max-height: 500px) {
+  .ptop { top: calc(env(safe-area-inset-top, 0px) + 8px); padding-block: 4px; }
+  .pctrl { bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); padding-block: 8px; }
+}

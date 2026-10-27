@@ -10,9 +10,9 @@ PictureHouse comes with two themes:
 - **PictureHouse** (`picturehouse`). The original look: a dark cinema with
   amber highlights, condensed poster titles and a side rail. It sets nothing,
   because it *is* the built-in look.
-- **iStream** (`istream`). Inspired by Apple TV: a frosted top bar, the system
-  font in sentence case, white highlights, and artwork that lifts when chosen.
-  It's the reference example: [`src/picturehouse/themes/builtin/istream`](../src/picturehouse/themes/builtin/istream).
+- **iStream** (`istream`). Liquid glass, inspired by Apple TV: floating glass
+  controls over edge-to-edge artwork, the page tinted by the artwork on screen,
+  and springy motion. It's the reference example, using every layout option: [`src/picturehouse/themes/builtin/istream`](../src/picturehouse/themes/builtin/istream).
 
 ## Using themes
 
@@ -134,7 +134,23 @@ built-in themes' CSS is the best guide.
 
 | Option | Values | Effect |
 |---|---|---|
-| `nav` | `"rail"` (default), `"top"` | Where the main navigation sits on tablets and computers. `"top"` puts it in a bar across the top with centred tabs; `size.navigation` is then the bar's height (iStream uses `64px`). Phones always use the bottom tab bar. |
+| `nav` | `"rail"` (default) | A rail down the left side (a bottom tab bar on phones). |
+| | `"top"` | A bar across the top with centred tabs; `size.navigation` is its height. Phones keep the bottom tab bar. |
+| | `"floating"` | A capsule floating over the page: centred at the top on computers, just above the bottom edge on phones; `size.navigation` is its height. The search / "Play to" row floats too (beside the capsule on screens 1600px and wider), and the logo isn't shown on computers. |
+| `hero` | `"card"` (default) | The home banner and detail backdrops are rounded cards inside the page. |
+| | `"full-bleed"` | They run edge to edge and fade into the page; with `"nav": "floating"` they also slide up under the floating controls. |
+
+Layout options do the structural work (positions and sizes); the look of the
+bars and capsules (glass, colours, shadows) is up to theme.css.
+
+### Variables PictureHouse provides
+
+Besides the token variables, theme.css can use:
+
+| Variable | Contents |
+|---|---|
+| `--ph-ambient` | The artwork on screen (the home banner, or the backdrop of a film, series or album page) as a CSS image, or `none`. For tinting the page with what's showing, as iStream does: `background: var(--ph-ambient, none) center / cover; filter: blur(80px);`. |
+| `--ph-main-top`, `--ph-hero-pull` | Set by the `"floating"` and `"full-bleed"` layouts: how far down the page content starts, and how far a full-bleed banner slides up under the controls. |
 
 ### theme.css
 
@@ -146,12 +162,13 @@ so plain selectors win. These class names are kept stable for themes:
 |---|---|
 | Navigation | `.rail` (rail or top bar), `.logo`, `.navbtn`, `.navbtn.on` (current tab) |
 | Page | `.main`, `.top` (search row), `.search`, `.devbtn`, `.devmenu`, `.page-head h1`, `.sec`, `.sec-head h2` |
-| Banner | `.hero`, `.hero-img`, `.hero-shade`, `.hero-title`, `.hero-syn`, `.eyebrow`, `.meta` |
+| Banner | `.hero`, `.hero-img`, `.hero-shade`, `.hero-body`, `.hero-title`, `.hero-syn`, `.eyebrow`, `.meta`, `.dot` (slide dots) |
 | Artwork | `.card`, `.card .art`, `.card .cap`, `.poster`, `.poster .ptitle` (title on generated posters), `.land`, `.square`, `.row`, `.grid` |
 | Controls | `.btn`, `.btn.primary`, `.btn.small`, `.chip`, `.chip.on`, `.link`, `.pill`, `.field` |
-| Details | `.d-back`, `.d-poster`, `.d-title`, `.d-syn`, `.badge`, `.ep` (episode), `.trk` (track) |
+| Details | `.back`, `.d-back`, `.d-poster`, `.d-title`, `.d-syn`, `.badge`, `.ep` (episode), `.trk` (track) |
 | Panels | `.panel`, `.stat`, `.sheet`, `.sheet-box`, `.mini` (music bar), `.toast` |
-| Player | `.player`, `.ptop`, `.pctrl`, `.pbtn`, `.pbtn.big`, `.scrub` |
+| Player | `.player`, `.ptop` (title), `.pctrl` (controls), `.pbtn`, `.pbtn.big`, `.ptxt`, `.scrub`, `.player.idle` (controls hidden) |
+| Library | `.theme` (Appearance cards), `.browser` (folder browser) |
 
 **What theme.css can't do.** These rules keep themes safe to share:
 

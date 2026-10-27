@@ -45,19 +45,31 @@ def test_builtin_themes_are_valid_and_picturehouse_changes_nothing():
     store = ThemeStore(None)
     assert set(store.themes()) == {"picturehouse", "istream"} and store.problems == []
     ph = store.get("picturehouse")
-    assert ph.tokens == {} and ph.layout == {"nav": "rail"} and not ph.stylesheet
+    assert ph.tokens == {} and ph.layout == {"nav": "rail", "hero": "card"} and not ph.stylesheet
     css = render_css(ph)
     assert "--" not in css.split("color-scheme")[1]  # no token overrides at all
 
 
 def test_istream_is_a_full_theme():
     ist = ThemeStore(None).get("istream")
-    assert ist.layout == {"nav": "top"} and ist.value("color.accent") == "#f5f5f7"
+    assert ist.layout == {"nav": "floating", "hero": "full-bleed"}
+    assert ist.value("color.accent") == "#ffffff"
     css = render_css(ist)
-    assert "--accent: #f5f5f7;" in css and "backdrop-filter" in css
-    assert 'Layout option "nav": "top"' in css  # the engine's top-bar layout is included
+    assert "--accent: #ffffff;" in css and "backdrop-filter" in css
+    assert 'Layout option "nav": "floating"' in css and 'Layout option "hero": "full-bleed"' in css
+    assert "var(--ph-ambient" in css  # tints the page with the artwork on screen
     tv = render_css(ist, "tv")
-    assert "--accent: #f5f5f7;" in tv and "--rail" not in tv and "backdrop" not in tv
+    assert "--surface: #1c1c1e;" in tv  # the TV gets solid colours (no glass there)
+    assert "--rail" not in tv and "backdrop" not in tv
+
+
+def test_every_layout_option_has_its_stylesheet():
+    from picturehouse.themes.engine import LAYOUT, LAYOUT_DIR
+
+    for option, values in LAYOUT.items():
+        for value in values[1:]:
+            css = (LAYOUT_DIR / f"{option}-{value}.css").read_text(encoding="utf-8")
+            assert f'Layout option "{option}": "{value}"' in css
 
 
 def test_token_defaults_match_app_css():
@@ -197,7 +209,7 @@ def test_http_routes(media_library, tmp_path):
             assert {t["id"] for t in d["themes"]} == {"picturehouse", "istream", "teal"}
             r = lan.get("/theme.css", params={"id": "istream"})
             assert (
-                r.headers["content-type"].startswith("text/css") and "--accent: #f5f5f7" in r.text
+                r.headers["content-type"].startswith("text/css") and "--accent: #ffffff" in r.text
             )
             assert "--accent" not in lan.get("/theme.css").text  # default: the built-in look
             assert lan.get("/theme.css", params={"id": "nope"}).status_code == 200  # falls back
@@ -211,8 +223,8 @@ def test_http_routes(media_library, tmp_path):
                 pc.put("/api/settings/theme", json={"default": "istream"}).json()["default"]
                 == "istream"
             )
-            assert "--accent: #f5f5f7" in pc.get("/theme.css").text  # now everyone's default
-            assert "--accent: #f5f5f7" in pc.get("/theme.css", params={"target": "tv"}).text
+            assert "--accent: #ffffff" in pc.get("/theme.css").text  # now everyone's default
+            assert "--accent: #ffffff" in pc.get("/theme.css", params={"target": "tv"}).text
         assert 'theme = "istream"' in svc.config_file.read_text(encoding="utf-8")
     finally:
         svc.close()

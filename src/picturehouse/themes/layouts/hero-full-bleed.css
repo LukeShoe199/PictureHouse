@@ -1,0 +1,22 @@
+/* Layout option "hero": "full-bleed" — the home banner and the backdrops on
+   film, series and album pages run edge to edge and fade into the page. With
+   "nav": "floating" on wide screens the banner also slides up under the
+   floating controls. */
+.hero { margin-inline: calc(-1 * var(--gut)); margin-top: calc(-1 * var(--ph-hero-pull, 0px)); border-radius: 0;
+  min-height: min(86vh, 880px); background: transparent; }
+/* Only the picture fades into the page (fading .hero would dim its buttons too). */
+.hero-img, .hero-shade { -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.hero-body { padding: 0 var(--gut) clamp(64px, 11vh, 128px); max-width: 780px; }
+.hero-dots { right: var(--gut); bottom: clamp(64px, 11vh, 128px); }
+.d-back { margin-inline: calc(-1 * var(--gut)); border-radius: 0; aspect-ratio: auto; height: min(62vh, 620px); background: transparent;
+  -webkit-mask-image: linear-gradient(#000 50%, transparent); mask-image: linear-gradient(#000 50%, transparent); }
+.d-back::after { display: none; }
+/* Detail backdrops also run up under the controls; the Back button floats on top. */
+.d-back { margin-top: calc(-1 * var(--ph-hero-pull, 0px) - 48px); }
+.back { position: relative; z-index: 3; }
+.d-main { margin-top: -200px; }
+@media (max-width: 760px) {
+  .hero { min-height: 74vh; }
+  .d-back { height: 48vh; }
+  .d-main { margin-top: -110px; }
+}

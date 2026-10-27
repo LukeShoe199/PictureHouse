@@ -11,6 +11,7 @@ and browsers around the house.
   - TVs over DLNA, with nothing to install on the TV;
   - a proper LG TV app;
   - any browser, which can be added to a phone's home screen;
+  - old devices too (iOS 9 Safari and similar), through the simpler *PictureHouse Lite*;
   - Chromecast.
 - **Converts only when needed.** A file a device can play is sent as it is.
   Anything else is converted on the fly with FFmpeg.

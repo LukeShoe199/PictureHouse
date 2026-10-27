@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Literal
 
 import anyio
@@ -56,7 +57,7 @@ from picturehouse.streaming.hls import playlist as hls_playlist_text
 from picturehouse.themes import ThemeStore, render_css
 from picturehouse.themes.engine import ASSET_TYPES as THEME_ASSET_TYPES
 from picturehouse.tls import ca_fingerprint
-from picturehouse.web import access
+from picturehouse.web import access, lite
 from picturehouse.web import queries as Q
 
 log = logging.getLogger(__name__)
@@ -287,7 +288,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     @app.middleware("http")
     async def track_clients(request: Request, call_next):
         path = request.url.path
-        if request.client and (path.startswith("/dlna/") or path.endswith(("/file", "/play"))):
+        if request.client and (path.startswith(("/dlna/", "/lite/item/"))
+                               or path.endswith(("/file", "/play"))):  # fmt: skip
             via = "dlna" if path.startswith("/dlna/") else "web"
             await anyio.to_thread.run_sync(
                 tracker.seen, request.client.host, request.headers.get("user-agent", ""), via
@@ -1315,6 +1317,13 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
         return {"lines": parsed}
 
     app.include_router(api)
+
+    # PictureHouse Lite: server-built pages for browsers too old for the console.
+    lite.install(app, svc, SimpleNamespace(
+        films=films, home_videos=home_videos, shows=shows, show=show, recent=recent,
+        continue_watching=continue_watching, music_artists=music_artists,
+        music_artist=music_artist, music_album=music_album, photos=photos,
+        photo_album=photo_album, item_detail=item_detail, play=play))  # fmt: skip
 
     # ------------------------------------------------------------ DLNA + UI
 

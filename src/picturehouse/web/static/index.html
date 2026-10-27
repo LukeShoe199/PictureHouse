@@ -10,6 +10,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PictureHouse">
 <title>PictureHouse</title>
+<!-- Browsers too old for the console (e.g. Safari on iOS 9/10) go to PictureHouse
+     Lite (/lite/, web/lite.py). ES3 on purpose: it must run where nothing else does.
+     ?full=1 keeps this device on the full version, ?full=0 undoes that. -->
+<script>(function(){var q=location.search,keep=null,ok=!!(window.fetch&&window.Promise);
+try{if(/[?&]full=1/.test(q))localStorage.setItem("ph.full","1");if(/[?&]full=0/.test(q))localStorage.removeItem("ph.full");keep=localStorage.getItem("ph.full");}catch(e){}
+if(keep||/[?&]full=1/.test(q))return;try{new Function("async function f(){await 0}var g=()=>0,h=null;h?.x??g()");}catch(e){ok=false;}
+if(!ok)location.replace("/lite/");})();</script>
+<noscript><meta http-equiv="refresh" content="0;url=/lite/"></noscript>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">

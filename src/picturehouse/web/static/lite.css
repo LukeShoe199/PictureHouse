@@ -1,0 +1,63 @@
+/* PictureHouse Lite (web/lite.py): plain pages for old browsers. Only CSS
+   that Safari on iOS 9 understands: no grid, variables, gap or object-fit.
+   Colours are the PictureHouse theme's. */
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: #0a0d11; color: #eef1f4;
+  font: 16px/1.4 -apple-system, "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif; }
+a { color: #f2b33d; text-decoration: none; }
+h1 { font-size: 26px; margin: 8px 0 6px; }
+h2 { font-size: 19px; margin: 26px 0 10px; }
+.dim { color: #93a0b0; }
+.syn { color: #c9d1da; max-width: 760px; }
+.msg { background: #19212c; border-left: 3px solid #ec8a4c; padding: 10px 14px; }
+
+.bar { background: #080a0d; border-bottom: 1px solid #243041; padding: 0 12px;
+  white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.bar a { display: inline-block; padding: 14px 10px; color: #eef1f4; font-weight: 600; }
+.bar .logo { color: #f2b33d; font-weight: 800; letter-spacing: 1px; padding-right: 14px; }
+.main { padding: 10px 16px 24px; }
+.back { display: inline-block; padding: 6px 0; color: #93a0b0; }
+.foot { padding: 16px; color: #5f6b7a; font-size: 13px; border-top: 1px solid #243041; margin: 0; }
+
+.btn { display: inline-block; padding: 9px 16px; margin: 0 6px 6px 0; border-radius: 8px;
+  background: #19212c; border: 1px solid #243041; color: #eef1f4; font-weight: 600; }
+.btn.primary { background: #f2b33d; border-color: #f2b33d; color: #1b1305; }
+.btn.big { padding: 14px 22px; font-size: 18px; }
+.secs { margin: 6px 0 4px; }
+.pg { margin: 18px 0 0; }
+.pg .dim { margin-right: 10px; }
+
+/* Cards: inline-blocks in a percentage grid (font-size 0 removes the gaps). */
+.g { font-size: 0; margin: 0 -6px; }
+.c { display: inline-block; vertical-align: top; width: 33.333%; padding: 0 6px 14px;
+  box-sizing: border-box; font-size: 14px; color: #eef1f4; }
+.c.l { width: 50%; }
+@media (min-width: 600px) { .c { width: 20%; } .c.l { width: 33.333%; } }
+@media (min-width: 900px) { .c { width: 14.285%; } .c.l { width: 25%; } }
+.c .a { display: block; position: relative; height: 0; padding-bottom: 150%; border-radius: 7px;
+  background-color: #121821; background-position: center; background-size: cover; background-repeat: no-repeat; overflow: hidden; }
+.c.l .a { padding-bottom: 56.25%; }
+.c.q .a { padding-bottom: 100%; }
+/* The title on the card shows through only where there's no artwork. */
+.c .n { position: absolute; left: 8px; right: 8px; top: 8px; font-size: 13px; color: #93a0b0;
+  z-index: 0; }
+.c .a[style] .n { display: none; }
+.c .pr { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.6); }
+.c .pr span { display: block; height: 4px; background: #f2b33d; }
+.c .t, .c .s { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c .t { margin-top: 6px; font-weight: 600; }
+.c .s { color: #93a0b0; font-size: 13px; }
+.c.ph .t, .c.ph .s { display: none; }
+
+.head { overflow: hidden; margin-bottom: 8px; }
+.cover { float: left; width: 120px; height: 120px; margin: 0 16px 6px 0; border-radius: 7px;
+  background-color: #121821; background-position: center; background-size: cover; background-repeat: no-repeat; }
+.tracks { list-style: none; padding: 0; margin: 0; max-width: 760px; }
+.tracks a { display: block; padding: 12px 6px; border-bottom: 1px solid #243041; color: #eef1f4; }
+.tracks .no { display: inline-block; width: 32px; color: #93a0b0; }
+.tracks .dur { float: right; color: #93a0b0; }
+
+.pl { margin: 12px 0; max-width: 960px; }
+.pl video { display: block; width: 100%; background: #000; }
+.pl audio { display: block; width: 100%; }
+.photo { display: block; max-width: 100%; max-height: 80vh; margin: 10px auto 0; }

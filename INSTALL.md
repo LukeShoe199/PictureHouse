@@ -321,6 +321,13 @@ Do this once, on whichever computer runs PictureHouse.
 - **Other phones, tablets and computers:** open `http://<that-computer>:9595/`
   in the browser. On phones, "Add to Home screen" makes it an app. Casting
   to a Chromecast works from there.
+- **Older iPhones, iPads and browsers** (e.g. the first iPad mini on iOS 9):
+  the same address opens **PictureHouse Lite** instead, a simpler version
+  made of plain pages: browse films, TV, music and photos, and tap to play.
+  It works over plain `http://` with no certificate, and remembers where you
+  were like everything else. Any device can open it at
+  `http://<that-computer>:9595/lite/`; *Full version* at the bottom of a Lite
+  page switches that device back to the full console.
 
 **If something doesn't work:**
 

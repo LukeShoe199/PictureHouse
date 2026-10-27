@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "istream",
   "name": "iStream",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": "PictureHouse",
   "description": "Liquid glass, inspired by Apple TV: floating glass controls over edge-to-edge artwork, the page tinted by what's on screen, and soft, springy motion.",
   "scheme": "dark",
@@ -36,8 +36,11 @@
     "tokens": {
       "color.surface": "#1c1c1e",
       "color.surface-raised": "#2c2c2e",
-      "color.line": "rgba(255, 255, 255, 0.12)"
-    }
+      "color.line": "rgba(255, 255, 255, 0.12)",
+      "font.display": "\"Figtree\", \"Helvetica Neue\", Arial, sans-serif",
+      "font.body": "\"Figtree\", \"Helvetica Neue\", Arial, sans-serif"
+    },
+    "stylesheet": "tv.css"
   },
   "stylesheet": "theme.css"
 }

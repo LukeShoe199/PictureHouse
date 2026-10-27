@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -59,8 +60,13 @@ def test_istream_is_a_full_theme():
     assert 'Layout option "nav": "floating"' in css and 'Layout option "hero": "full-bleed"' in css
     assert "var(--ph-ambient" in css  # tints the page with the artwork on screen
     tv = render_css(ist, "tv")
-    assert "--surface: #1c1c1e;" in tv  # the TV gets solid colours (no glass there)
-    assert "--rail" not in tv and "backdrop" not in tv
+    assert "--surface: #1c1c1e;" in tv  # the TV gets solid colours...
+    assert "--rail" not in tv and "istream/tv.css" in tv  # ...and its own stylesheet
+    assert '"Figtree"' in tv  # a font the TV page loads (no Apple fonts on webOS)
+    # webOS 5 is Chrome 68: glass only where the TV can draw it
+    rules = re.sub(r"/\*.*?\*/", "", tv, flags=re.S)
+    outside = re.sub(r"@supports[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", "", rules)
+    assert "backdrop-filter" in rules and "backdrop-filter" not in outside
 
 
 def test_every_layout_option_has_its_stylesheet():
@@ -116,6 +122,8 @@ def test_a_minimal_theme(tmp_path):
         ({"tokens": {"radius.card": "big"}}, "isn't a valid length"),
         ({"tv": {"tokens": {"radius.card": "4px"}}}, "TV interface doesn't use"),
         ({"stylesheet": "other.css"}, "stylesheet"),
+        ({"tv": {"stylesheet": "theme.css"}}, "tv.stylesheet"),
+        ({"tv": {"layout": {}}}, '"tv" may only contain'),
     ],
 )
 def test_bad_themes_are_refused_with_a_reason(tmp_path, fields, message):
@@ -273,3 +281,23 @@ def test_dropdown_lists_are_readable_in_every_theme():
         assert not theme.value("color.background").startswith("rgba"), (
             f"{theme.id}: solid background needed"
         )
+
+
+def test_a_theme_can_style_the_tv(tmp_path):
+    folder = make_theme(tmp_path, tv={"stylesheet": "tv.css"})
+    (folder / "tv.css").write_text(".card.f.on .art { transform: scale(1.1) }", encoding="utf-8")
+    t = load_theme(folder)
+    assert "scale(1.1)" in render_css(t, "tv") and "scale(1.1)" not in render_css(t)
+    (folder / "tv.css").write_text('@import "https://evil.example/x.css";', encoding="utf-8")
+    with pytest.raises(ThemeError, match="@import"):  # the same safety rules as theme.css
+        load_theme(folder)
+    (folder / "tv.css").unlink()
+    with pytest.raises(ThemeError, match="no such file"):
+        load_theme(folder)
+
+
+def test_tv_page_uses_this_tvs_own_theme():
+    page = (REPO / "src/picturehouse/web/static/tv/index.html").read_text(encoding="utf-8")
+    assert 'href="/theme.css?target=tv" id="themecss"' in page and "ph.theme" in page
+    js = (REPO / "src/picturehouse/web/static/tv/tv.js").read_text(encoding="utf-8")
+    assert "function setTvTheme" in js and "/api/themes" in js

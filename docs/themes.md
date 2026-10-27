@@ -3,7 +3,8 @@
 A theme changes how PictureHouse looks: colours, fonts, corner rounding, where
 the navigation sits, and anything else CSS can style. Themes apply to the web
 console everywhere it appears: browsers, the Windows and Linux apps, and the
-Android app. The LG TV interface follows a theme's colours and fonts.
+Android app. The LG TV interface follows a theme's colours and fonts, plus
+its own TV stylesheet if the theme has one (iStream does).
 
 PictureHouse comes with two themes:
 
@@ -17,7 +18,7 @@ PictureHouse comes with two themes:
 ## Using themes
 
 - **On one device:** *Library → Appearance → Use on this device*. The choice is
-  stored in that browser or app only.
+  stored in that browser or app only. On the TV app: *Settings → Appearance*.
 - **For every device** (admin): *Library → Appearance → Make default for all
   devices*. Devices without their own choice use it from the next time they
   open or reload PictureHouse (the device you change it on, straight away).
@@ -45,7 +46,8 @@ A folder whose name is the theme's id:
 my-theme/
   theme.json      required: the theme language (below)
   theme.css       optional: restyle anything else
-  assets/         optional: images and fonts that theme.css uses
+  tv.css          optional: restyle the TV interface (see "The TV interface")
+  assets/         optional: images and fonts that theme.css or tv.css use
 ```
 
 ### theme.json
@@ -66,7 +68,7 @@ my-theme/
     "color.on-accent": "#00201c",
     "radius.card": "10px"
   },
-  "tv": { "tokens": { "color.accent": "#81e6d9" } },
+  "tv": { "tokens": { "color.accent": "#81e6d9" }, "stylesheet": "tv.css" },
   "stylesheet": "theme.css"
 }
 ```
@@ -80,7 +82,7 @@ my-theme/
 | `scheme` | no | `"dark"` (default) or `"light"`: tells browsers which way to draw scrollbars and form controls. |
 | `layout` | no | Layout options, see below. |
 | `tokens` | no | Design tokens, see below. Anything you leave out keeps the PictureHouse value. |
-| `tv` | no | `{"tokens": {...}}`: different values for the TV interface (only tokens marked *TV* below). |
+| `tv` | no | `{"tokens": {...}, "stylesheet": "tv.css"}`: different token values for the TV interface (only tokens marked *TV* below), and its own stylesheet. |
 | `stylesheet` | no | `"theme.css"` if the theme has one. |
 
 Unknown fields, tokens or values are refused with a message saying what's
@@ -200,6 +202,30 @@ so plain selectors win. These class names are kept stable for themes:
 
 PictureHouse checks this when it loads the theme. A theme that breaks a rule
 isn't used, and Library → Appearance shows the admin why.
+
+### The TV interface
+
+The LG TV app shows a big-screen interface built for a remote control
+(`static/tv/` in the source). It uses the theme's *TV* tokens, then the
+theme's `tv.css` if `"tv": {"stylesheet": "tv.css"}` is set. `theme.css` is
+not used there: the page is different, and so is the browser.
+
+Write `tv.css` for **webOS 5, which is Chrome 68**:
+
+- no `backdrop-filter` (glass) except inside `@supports (backdrop-filter: blur(1px))`,
+  so newer TVs get it and older ones don't break;
+- no flex `gap`, `:is()`, `aspect-ratio` or `inset`;
+- animate only `transform` and `opacity`, and keep big shadows to the focused
+  item: TVs have slow graphics chips.
+
+The focused element has the classes `f on`. Stable classes: `.top`, `.tabs`,
+`.tab` (`.cur` = current page), `.brand`, `.logo`, `.clock`, `.hero`,
+`.hero-bg`, `.card`, `.card .art`, `.cap`, `.row`, `.grid`, `.prog`,
+`.badge`, `.detail-bg`, `.poster`, `.facts`, `.btn` (`.primary`), `.season`,
+`.chip`, `.ep`, `.trk`, `.search-box`, `.osd`, `.bar`, `.cbtn`, `.osd-msg`,
+`.toast`, `.pthumb`, `.np`. iStream's `tv.css` is a complete example.
+
+The same safety rules apply to `tv.css` as to `theme.css`.
 
 ### Light themes
 

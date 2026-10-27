@@ -117,6 +117,7 @@ class Theme:
     folder: Path
     builtin: bool
     stylesheet: str = ""  # checked, url()s rewritten to /themes/<id>/...
+    tv_stylesheet: str = ""  # the same, for the TV interface (tv.css)
     assets: set[str] = field(default_factory=set)
 
     def value(self, token: str) -> str:
@@ -234,29 +235,33 @@ def load_theme(folder: Path, *, builtin: bool = False) -> Theme:
 
     tokens = tokens_of(data.get("tokens"), str(manifest))
     tv = data.get("tv", {})
-    if not isinstance(tv, dict) or set(tv) - {"tokens"}:
-        raise ThemeError(f'{manifest}: "tv" may only contain "tokens"')
+    if not isinstance(tv, dict) or set(tv) - {"tokens", "stylesheet"}:
+        raise ThemeError(f'{manifest}: "tv" may only contain "tokens" and "stylesheet"')
     tv_tokens = tokens_of(tv.get("tokens"), f"{manifest} (tv)")
     not_tv = [k for k in tv_tokens if not TOKENS[k].tv]
     if not_tv:
         raise ThemeError(f"{manifest}: the TV interface doesn't use {', '.join(not_tv)}")
 
     assets = _theme_assets(folder)
-    stylesheet = ""
-    css_name = data.get("stylesheet")
-    if css_name is not None:
-        if css_name != "theme.css":
-            raise ThemeError(f'{manifest}: "stylesheet" must be "theme.css"')
-        css_file = folder / "theme.css"
+
+    def sheet(css_name, expected: str, where: str) -> str:
+        if css_name is None:
+            return ""
+        if css_name != expected:
+            raise ThemeError(f'{manifest}: {where} must be "{expected}"')
+        css_file = folder / expected
         if not css_file.is_file():
-            raise ThemeError(f"{manifest}: names theme.css, but there's no such file")
-        stylesheet = _check_stylesheet(
-            css_file.read_text(encoding="utf-8-sig"), folder, tid, assets
-        )
+            raise ThemeError(f"{manifest}: names {expected}, but there's no such file")
+        return _check_stylesheet(css_file.read_text(encoding="utf-8-sig"), folder, tid, assets)
+
+    stylesheet = sheet(data.get("stylesheet"), "theme.css", '"stylesheet"')
+    # The TV gets its own: a different page, and webOS 5 is Chrome 68 (no
+    # backdrop-filter, so no glass), so the console's theme.css doesn't fit.
+    tv_stylesheet = sheet(tv.get("stylesheet"), "tv.css", '"tv.stylesheet"')
     return Theme(
         id=tid, name=name.strip(), scheme=scheme, layout=layout, tokens=tokens,
         tv_tokens=tv_tokens, folder=folder, builtin=builtin, stylesheet=stylesheet,
-        assets=assets, **texts,
+        tv_stylesheet=tv_stylesheet, assets=assets, **texts,
     )  # fmt: skip
 
 
@@ -270,7 +275,10 @@ def render_css(theme: Theme, target: str = "console") -> str:
     if target == "tv":
         tv = {k: v for k, v in theme.tokens.items() if TOKENS[k].tv}
         tv.update(theme.tv_tokens)
-        return head + f":root {{\n  color-scheme: {theme.scheme};\n{_declarations(tv)}}}\n"
+        css = head + f":root {{\n  color-scheme: {theme.scheme};\n{_declarations(tv)}}}\n"
+        if theme.tv_stylesheet:
+            css += f"\n/* ---- {theme.id}/tv.css ---- */\n{theme.tv_stylesheet}"
+        return css
     css = head + f":root {{\n  color-scheme: {theme.scheme};\n{_declarations(theme.tokens)}}}\n"
     for option, value in theme.layout.items():
         if value != LAYOUT[option][0]:
@@ -303,7 +311,7 @@ class ThemeStore:
         # files are small (theme.css is capped at 256 KB).
         sig = []
         for d, _ in folders:
-            for f in (d / "theme.json", d / "theme.css"):
+            for f in (d / "theme.json", d / "theme.css", d / "tv.css"):
                 try:
                     sig.append((str(f), hashlib.blake2b(f.read_bytes(), digest_size=16).digest()))
                 except OSError:

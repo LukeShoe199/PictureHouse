@@ -1,0 +1,114 @@
+/* iStream on the TV (the LG app's big-screen interface, static/tv/).
+   Apple TV on a remote: artwork that lifts toward you when focused, a soft
+   shadow under it, white pills for whatever is selected, and titles that
+   brighten as you land on them.
+
+   Written for webOS 5 (Chrome 68): no backdrop-filter outside @supports, no
+   flex gap, no :is(). Only transform and opacity animate, and only the
+   focused item carries a shadow, so a 2020 TV keeps up. */
+
+body { background: #050507; letter-spacing: -.005em; }
+
+/* ---------- Top bar: a floating capsule of tabs ---------- */
+.top { height: 6rem; background: linear-gradient(rgba(5, 5, 7, .85), rgba(5, 5, 7, 0)); }
+.brand { font: 700 1.3rem/1 var(--display); text-transform: none; letter-spacing: -.01em; margin-right: 0; }
+.logo { border-radius: .6rem; }
+.tabs { flex: 0 0 auto; margin: 0 auto; padding: .35rem; border-radius: 3rem;
+  background: rgba(44, 44, 50, .82); box-shadow: 0 .6rem 2rem rgba(0, 0, 0, .35); }
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .tabs { background: rgba(60, 60, 68, .5); -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    backdrop-filter: blur(24px) saturate(1.6); }
+}
+.tab { padding: .55rem 1.25rem; margin-right: .15rem; color: rgba(235, 235, 245, .62);
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+.tab.cur { background: rgba(255, 255, 255, .14); color: var(--fg); }
+.tab.f.on { background: #fff; color: #000; transform: scale(1.08); }
+.nowpill { background: rgba(255, 255, 255, .14); color: var(--fg); }
+.nowpill.f.on { background: #fff; color: #000; }
+.clock { color: rgba(235, 235, 245, .7); }
+
+/* ---------- Type ---------- */
+h1 { font-weight: 700; letter-spacing: -.025em; }
+h2 { font-weight: 600; font-size: 1.4rem; color: rgba(235, 235, 245, .82); margin-top: 1.6rem; }
+.eyebrow { color: rgba(235, 235, 245, .7); font-weight: 600; letter-spacing: .08em; font-size: .9rem; }
+
+/* ---------- Home banner: edge to edge, fading into the page ---------- */
+.hero { height: 34rem; padding-top: 13rem; }
+.hero-bg { background-position: center 20%; }
+.hero-bg::after {
+  background: linear-gradient(90deg, rgba(5, 5, 7, .9) 0%, rgba(5, 5, 7, .45) 45%, rgba(5, 5, 7, 0) 75%),
+              linear-gradient(0deg, #050507 0%, rgba(5, 5, 7, 0) 50%); }
+.hero-text h1 { font-size: 3.6rem; }
+
+/* ---------- Artwork: lifts toward you when focused ---------- */
+.card { background: none; overflow: visible; border-radius: 0; transition: none; }
+.card.f.on { transform: none; box-shadow: none; }
+.card .art { border-radius: 1rem; background: #1c1c1e;
+  transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.card.f.on .art { transform: scale(1.09);
+  box-shadow: 0 1.6rem 2.8rem rgba(0, 0, 0, .7), 0 0 0 .12rem rgba(255, 255, 255, .55); }
+/* The light catching the top edge of a lifted card. */
+.card .art::after { content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0; opacity: 0;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0) 45%);
+  transition: opacity .22s; }
+.card.f.on .art::after { opacity: 1; }
+.cap { padding: .75rem .15rem 0; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.cap b { color: rgba(235, 235, 245, .7); font-weight: 600; }
+.cap span { color: rgba(235, 235, 245, .42); }
+.card.f.on .cap { transform: translateY(.9rem); }
+.card.f.on .cap b { color: #fff; }
+.row { padding-top: 1.6rem; padding-bottom: 2.4rem; }
+.row > .card { margin-right: 1.8rem; }
+.grid { grid-gap: 2.6rem 1.8rem; padding-top: 1.4rem; }
+/* Cards overflow (so the lift isn't clipped), which would let a long title
+   widen its grid column: keep columns equal. */
+.grid > .card { min-width: 0; }
+.prog { left: .7rem; right: .7rem; bottom: .7rem; height: .3rem; border-radius: .15rem; background: rgba(255, 255, 255, .25); }
+.prog i { background: #fff; border-radius: .15rem; }
+.badge { border-radius: 2rem; background: rgba(0, 0, 0, .55); padding: .1rem .6rem; }
+
+/* ---------- Details ---------- */
+.detail-bg::after {
+  background: linear-gradient(90deg, #050507 25%, rgba(5, 5, 7, .7) 55%, rgba(5, 5, 7, .25)),
+              linear-gradient(0deg, #050507, rgba(5, 5, 7, 0) 45%); }
+.detail .poster { border-radius: 1.2rem; box-shadow: 0 1.6rem 3rem rgba(0, 0, 0, .6); }
+.facts { color: rgba(235, 235, 245, .66); }
+
+/* Buttons and pills: frosted at rest, white when selected. */
+.btn { border-radius: 3rem; background: rgba(255, 255, 255, .14); padding: .9rem 2.3rem;
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+.btn.primary { background: rgba(255, 255, 255, .9); color: #000; }
+.btn.f.on { background: #fff; color: #000; box-shadow: 0 .8rem 2rem rgba(0, 0, 0, .5); transform: scale(1.07); }
+.season, .chip { border-radius: 3rem; background: rgba(255, 255, 255, .08); color: rgba(235, 235, 245, .75);
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+.season.cur, .chip.cur { background: rgba(255, 255, 255, .2); color: #fff; }
+.season.f.on, .chip.f.on { background: #fff; color: #000; transform: scale(1.07); }
+
+/* Episodes and tracks: soft rows that brighten. */
+.ep { border-radius: 1.2rem; background: rgba(255, 255, 255, .05); transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
+.ep .art { border-radius: .8rem; }
+.ep.f.on { background: rgba(255, 255, 255, .16); box-shadow: none; transform: scale(1.015); }
+.ep .o { color: rgba(235, 235, 245, .6); }
+.trk { border-radius: .9rem; background: rgba(255, 255, 255, .04); }
+.trk.f.on { background: rgba(255, 255, 255, .16); box-shadow: none; }
+.trk.on .tt { color: #fff; }
+.tprog i { background: #fff; }
+
+.search-box { border-radius: 1.4rem; background: rgba(255, 255, 255, .1); }
+.search-box.f.on { background: rgba(255, 255, 255, .18); box-shadow: 0 0 0 .16rem #fff; }
+
+/* ---------- Player, music and photos ---------- */
+.osd { background: linear-gradient(rgba(0, 0, 0, .65), rgba(0, 0, 0, 0) 22%, rgba(0, 0, 0, 0) 66%, rgba(0, 0, 0, .78)); }
+.osd-title, .np-t { font-weight: 700; letter-spacing: -.02em; }
+.bar { height: .4rem; border-radius: .2rem; background: rgba(255, 255, 255, .22); }
+.bar i { background: rgba(255, 255, 255, .35); }
+.bar b { background: #fff; }
+.cbtn { border-radius: 1.4rem; background: rgba(255, 255, 255, .12);
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+.cbtn.f.on, .cbtn.on { background: #fff; color: #000; transform: scale(1.08); box-shadow: 0 .8rem 2rem rgba(0, 0, 0, .5); }
+.cbtn.f.on span, .cbtn.on span { color: rgba(0, 0, 0, .65); }
+.osd-msg, .toast { border-radius: 1.6rem; background: rgba(36, 36, 42, .94); }
+.pthumb { border-radius: .9rem; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.pthumb.f.on { transform: scale(1.08); box-shadow: 0 1.2rem 2.4rem rgba(0, 0, 0, .7), 0 0 0 .12rem rgba(255, 255, 255, .55); }
+.miniviz { border-radius: 1rem; background: rgba(36, 36, 42, .85); }
+.miniviz i { background: #fff; }

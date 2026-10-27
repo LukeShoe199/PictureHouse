@@ -382,9 +382,9 @@ var PAGES = {
     });
   },
   settings: function () {
-    return api('/api/hello').then(function (h) {
-      var inApp = /[?&]app=1(&|$)/.test(location.search) || !!window.PalmSystem;
-      return '<h1>Settings</h1>' +
+    return Promise.all([api('/api/hello'), api('/api/themes').catch(function () { return null; })]).then(function (r) {
+      var h = r[0], inApp = /[?&]app=1(&|$)/.test(location.search) || !!window.PalmSystem;
+      return '<h1>Settings</h1>' + themesHTML(r[1]) +
         '<h2>Connection</h2>' +
         '<div class="facts"><span>Connected to <b style="color:var(--fg)">' + esc(h.name) + '</b></span></div>' +
         '<div class="facts"><span>Address: ' + esc(location.host) + '</span><span>PictureHouse ' + esc(h.version) + '</span></div>' +
@@ -430,6 +430,30 @@ var PAGES = {
 };
 var ITEMS = {}, SHOWS = {};
 
+/* Themes (docs/themes.md): this TV can use its own, kept in its storage like
+   the console's per-device choice; otherwise it follows the server default. */
+function tvTheme() { try { return localStorage.getItem('ph.theme'); } catch (e) { return null; } }
+function themesHTML(t) {
+  if (!t || !t.themes) return '';
+  var mine = tvTheme(), known = t.themes.some(function (x) { return x.id === mine; });
+  var active = known ? mine : null;
+  var def = t.themes.filter(function (x) { return x.id === t.default; })[0];
+  var btn = function (id, label) {
+    return '<button class="f season' + (id === active ? ' cur' : '') + '" data-k="theme-' + esc(id || '') +
+      '" data-theme="' + esc(id || '') + '">' + esc(label) + '</button>';
+  };
+  return '<h2>Appearance</h2><div class="seasons">' +
+    btn(null, 'Default' + (def ? ' (' + def.name + ')' : '')) +
+    t.themes.map(function (x) { return btn(x.id, x.name); }).join('') + '</div>';
+}
+function setTvTheme(id) {
+  try { if (id) localStorage.setItem('ph.theme', id); else localStorage.removeItem('ph.theme'); } catch (e) { /* no storage */ }
+  var link = $('#themecss');
+  if (link) link.href = '/theme.css?target=tv' + (id ? '&id=' + enc(id) : '&d=' + Date.now());
+  var p = cur(); p.focusKey = 'theme-' + (id || ''); p.scroll = $('.page .scroller').scrollTop;
+  render();
+}
+
 // Search: type with the TV's on-screen keyboard; results follow.
 var searchT = null;
 document.addEventListener('input', function (e) {
@@ -454,6 +478,7 @@ function activate(el) {
   if (el.dataset.act === 'retry') { render(); return; }
   if (el.dataset.act === 'reload') { location.reload(); return; }
   if (el.dataset.act === 'change-server') { changeServer(); return; }
+  if (el.dataset.theme != null) { setTvTheme(el.dataset.theme || null); return; }
   if (el.dataset.play) { play(+el.dataset.play, !!el.dataset.restart); return; }
   if (el.dataset.item) { go('item', el.dataset.item); return; }
   if (el.dataset.show) { go('show', el.dataset.show); return; }

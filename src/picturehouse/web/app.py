@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import functools
+import hashlib
 import json
 import logging
 import mimetypes
@@ -857,9 +858,14 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
                             headers={"Cache-Control": "public, max-age=86400"})  # fmt: skip
 
     @api.get("/items/{item_id}/art/{which}")
-    def art(item_id: int, which: Literal["poster", "thumb", "backdrop"],
+    def art(request: Request, item_id: int, which: Literal["poster", "thumb", "backdrop"],
             w: int | None = Query(None, ge=64, le=2000)):  # fmt: skip
-        """``w``: scaled down to about this width (cached), for grids."""
+        """``w``: scaled down to about this width (cached), for grids.
+
+        Revalidated on every use (an ETag from the image file), not cached
+        for a while: a poster.jpg replaced in the media folder keeps the same
+        URL, and must show the next time the page is drawn. Unchanged
+        artwork costs a 304."""
         with svc.db.session() as s:
             i = get_item(s, item_id)
             root = Path(i.root.path)
@@ -876,7 +882,16 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
                 found = images.resized(found, svc.layout.artwork_dir / "sized", w)
             except Exception as e:  # odd format Pillow can't read: send the original
                 log.info("artwork resize failed: %s", e, extra={"item": item_id})
-        return FileResponse(found, headers={"Cache-Control": "public, max-age=3600"})
+        st = found.stat()
+        etag = (
+            '"'
+            + hashlib.sha1(f"{found}|{st.st_mtime_ns}|{st.st_size}".encode()).hexdigest()[:20]
+            + '"'
+        )
+        headers = {"Cache-Control": "no-cache", "ETag": etag}
+        if etag in request.headers.get("if-none-match", ""):
+            return Response(status_code=304, headers=headers)
+        return FileResponse(found, headers=headers)
 
     # ------------------------------------------------------------ library management
 

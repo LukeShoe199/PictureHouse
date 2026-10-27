@@ -902,6 +902,10 @@ class Matcher:
                 elif r.kind == "film" and r.imdb_id and self.omdb:
                     summary.count(summary.films, self.match_film(
                         r.id, imdb_id=r.imdb_id, manual="match" in (r.locked or "")))  # fmt: skip
+                elif r.kind == "film":
+                    # Matched from its .nfo alone (no online id): match again,
+                    # which re-reads the .nfo, so an edited one is picked up.
+                    summary.count(summary.films, self.match_film(r.id))
             for show in shows:
                 status, n = self.match_show(show)
                 summary.count(summary.shows, status)

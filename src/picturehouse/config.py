@@ -103,6 +103,8 @@ class LibraryRoot(_Section):
     name: RootName
     path: Path
     kind: LibraryKind = "mixed"
+    # Child profiles see only kids libraries (see picturehouse.profiles).
+    kids: bool = False
 
     @field_validator("path")
     @classmethod

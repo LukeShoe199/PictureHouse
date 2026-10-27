@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -38,6 +39,7 @@ class LibraryRootRow(Base):
     path: Mapped[str] = mapped_column(Text)
     kind: Mapped[str] = mapped_column(String(16))
     configured: Mapped[bool] = mapped_column(Boolean, default=True)
+    kids: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     available: Mapped[bool] = mapped_column(Boolean, default=True)
     unavailable_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -193,11 +195,41 @@ class MediaStream(Base):
     item: Mapped[MediaItem] = relationship(back_populates="streams")
 
 
+class Profile(Base):
+    """Who's watching. Child profiles see kids libraries only; leaving one
+    needs the exit code. Profile 1 is the house default: it can be renamed
+    but not removed or made a child (see picturehouse.profiles)."""
+
+    __tablename__ = "profile"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40), unique=True)
+    child: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DeviceProfile(Base):
+    """The profile a device (by network address) is using. Kept on the
+    server, not in a cookie, so clearing a browser doesn't leave the child
+    profile; devices not listed use profile 1."""
+
+    __tablename__ = "device_profile"
+
+    address: Mapped[str] = mapped_column(String(64), primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("profile.id", ondelete="CASCADE"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class PlaybackState(Base):
-    """Resume position per item (single user for now)."""
+    """Resume position per profile and item."""
 
     __tablename__ = "playback_state"
 
+    profile_id: Mapped[int] = mapped_column(
+        ForeignKey("profile.id", ondelete="CASCADE"), primary_key=True
+    )
     item_id: Mapped[int] = mapped_column(
         ForeignKey("media_item.id", ondelete="CASCADE"), primary_key=True
     )

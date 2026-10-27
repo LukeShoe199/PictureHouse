@@ -21,10 +21,13 @@ from dataclasses import dataclass
 from html import escape
 from pathlib import PurePosixPath
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+
+from picturehouse.profiles import SCOPE, ProfileError
+from picturehouse.web import access
 
 log = logging.getLogger(__name__)
 
@@ -99,8 +102,10 @@ def sized(art: str | None, w: int) -> str | None:
 
 
 def page(name: str, title: str, body: str, *, back: tuple[str, str] | None = None,
-         status: int = 200) -> HTMLResponse:  # fmt: skip
-    nav = "".join(f'<a href="{h}">{label}</a>' for label, h in SECTIONS)
+         status: int = 200, who: str | None = None) -> HTMLResponse:  # fmt: skip
+    """``who``: this device's profile, shown as a link to change it."""
+    sections = SECTIONS + ([(f"&#9786; {e(who)}", "/lite/profiles")] if who else [])
+    nav = "".join(f'<a href="{h}">{label}</a>' for label, h in sections)
     crumb = f'<a class="back" href="{url(back[1])}">&lsaquo; {e(back[0])}</a>' if back else ""
     html = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -164,7 +169,7 @@ def episode_label(it: dict) -> str:
     return f"{num}. {it['title']}"
 
 
-def router(svc, api) -> APIRouter:
+def router(svc, api, profiles=None) -> APIRouter:
     """``api``: the JSON endpoint functions, by name (see create_app). They're
     called directly, so every parameter is passed: their defaults are
     FastAPI Query objects, not values."""
@@ -179,8 +184,53 @@ def router(svc, api) -> APIRouter:
         except HTTPException as ex:
             raise LiteError(ex.status_code, str(ex.detail)) from ex
 
+    def who() -> str | None:
+        if profiles is None or len(profiles.profiles()) < 2:
+            return None
+        return profiles.get(SCOPE.get().profile_id).name
+
     def render(title: str, body: str, back: tuple[str, str] | None = None) -> HTMLResponse:
-        return page(name(), title, body, back=back)
+        return page(name(), title, body, back=back, who=who())
+
+    @r.get("/profiles")
+    def profile_page(request: Request, error: str | None = None):
+        """Who's watching: a plain form per profile (the exit code when
+        leaving a child profile). ``error``: from a failed switch."""
+        me = profiles.get(SCOPE.get().profile_id)
+        body = "<h1>Who's watching?</h1>"
+        if error:
+            body += f'<p class="msg">{e(error)}</p>'
+        for p in profiles.profiles():
+            if p.id == me.id:
+                body += f'<p class="btn primary">{e(p.name)} (this device)</p>'
+                continue
+            needs = me.child and not p.child
+            code = ('<input class="code" name="code" type="password" inputmode="numeric" '
+                    'pattern="[0-9]*" maxlength="12" placeholder="Exit code" autocomplete="off">'
+                    if needs else "")  # fmt: skip
+            body += (f'<form class="prof" method="post" action="/lite/profiles">'
+                     f'<input type="hidden" name="id" value="{p.id}">{code}'
+                     f'<button class="btn" type="submit">{e(p.name)}'
+                     f'{" (child)" if p.child else ""}</button></form>')  # fmt: skip
+        if me.child:
+            body += '<p class="dim">Leaving this child profile needs the exit code.</p>'
+        return render("Profiles", body)
+
+    @r.post("/profiles")
+    async def profile_switch(request: Request):
+        if not access.origin_ok("POST", request.headers.get("origin"),
+                                request.headers.get("referer"), request.headers.get("host")):  # fmt: skip
+            raise LiteError(403, "request came from another website")
+        form = parse_qs((await request.body()).decode("utf-8", "replace"))
+        try:
+            pid = int(form.get("id", [""])[0])
+            profiles.switch(request.client.host if request.client else "", pid,
+                            form.get("code", [""])[0].strip() or None)  # fmt: skip
+        except ValueError:
+            raise LiteError(400, "no such profile") from None
+        except ProfileError as ex:
+            return RedirectResponse(f"/lite/profiles?error={quote(ex.message)}", 303)
+        return RedirectResponse("/lite/", 303)
 
     @r.get("")
     @r.get("/")
@@ -475,7 +525,7 @@ class LiteError(Exception):
 
 def install(app, svc, api) -> None:
     """Add Lite's pages, and its error page, to the app."""
-    app.include_router(router(svc, api))
+    app.include_router(router(svc, api, getattr(app.state, "profiles", None)))
 
     @app.middleware("http")
     async def lite_over_http(request, call_next):

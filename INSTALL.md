@@ -329,6 +329,32 @@ Do this once, on whichever computer runs PictureHouse.
   `http://<that-computer>:9595/lite/`; *Full version* at the bottom of a Lite
   page switches that device back to the full console.
 
+**Profiles, and a child's devices:**
+
+Each device uses one *profile*. Every profile has its own Continue watching,
+and a *child* profile only sees the libraries you mark as kids libraries.
+
+1. Put the children's films and series in their own folders (for example
+   `Kids Films`) and add them as libraries.
+2. Library → **Profiles**: set an **exit code** (4 to 12 digits, separate
+   from the admin PIN), tick the **kids libraries**, and add a profile with
+   **Child profile** ticked.
+3. Put the child's devices in it: on the device itself, choose the profile
+   with the button at the top of the page; or for any device, pick it in the
+   **Profile** column of Library → Devices on your network. A TV running the
+   LG app follows the profile set for it there.
+
+On a device in a child profile, only the kids libraries exist: lists,
+search, Continue watching and the Lite pages. A film's direct address
+doesn't work either, and the Library tab is hidden. Leaving it for an adult
+profile asks for the exit code. The server remembers each device's profile
+by its network address, so clearing the browser doesn't change it. TVs using
+their own DLNA media player aren't filtered: they see everything.
+
+From the command line: `picturehouse profile list|add|edit|remove|assign|exit-code`
+and `picturehouse library kids <name>` (on ZimaOS or Docker, run them with
+`sudo docker exec -it picturehouse …`).
+
 **If something doesn't work:**
 
 - **The TV doesn't see PictureHouse.** The TV and the server must be on the

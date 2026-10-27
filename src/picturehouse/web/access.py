@@ -46,6 +46,8 @@ OPEN_WRITES = [
     ("PUT", re.compile(r"^/api/items/\d+/progress$")),
     ("DELETE", re.compile(r"^/api/hls/[^/]+$")),
     ("POST", re.compile(r"^/api/admin/(login|logout)$")),
+    # A device's own profile (leaving a child profile still needs the exit code).
+    ("PUT", re.compile(r"^/api/profiles/current$")),
 ]
 # Reads that are admin-only: they expose internals or spend API quota.
 ADMIN_READS = [

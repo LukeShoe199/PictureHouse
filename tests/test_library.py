@@ -288,5 +288,8 @@ def test_every_migration_keeps_child_rows(tmp_path):
     with sqlite3.connect(tmp_path / "library.db") as c:
         assert c.execute("SELECT codec FROM media_stream").fetchall() == [("hevc",)]
         assert c.execute("SELECT position FROM playback_state").fetchall() == [(42.0,)]
+        # 0005: progress so far belongs to the main profile
+        assert c.execute("SELECT profile_id FROM playback_state").fetchall() == [(1,)]
+        assert c.execute("SELECT id, name, child FROM profile").fetchall() == [(1, "Main", 0)]
         assert c.execute("SELECT mtime_ns, match_status, color_transfer FROM media_item"
                          ).fetchone() == (0, "matched", None)  # fmt: skip

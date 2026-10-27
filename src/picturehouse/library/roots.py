@@ -28,12 +28,13 @@ def sync_roots(db: Database, settings: Settings) -> list[LibraryRootRow]:
             row = rows.get(key)
             if row is None:
                 row = LibraryRootRow(name=root.name, path=str(root.path), kind=root.kind,
-                                     available=root.path.is_dir())  # fmt: skip
+                                     kids=root.kids, available=root.path.is_dir())  # fmt: skip
                 if not row.available:
                     row.unavailable_since = utcnow()
                 s.add(row)
             else:
                 row.name, row.path, row.kind = root.name, str(root.path), root.kind
+            row.kids = root.kids
             row.configured = True
         for key, row in rows.items():
             if key not in wanted:
@@ -113,3 +114,16 @@ def set_config_values(config_file: Path, section: str, values: dict) -> Settings
     for k, v in values.items():
         table[k] = "" if v is None else v
     return _write_doc(config_file, doc)
+
+
+def set_root_kids(config_file: Path, name: str, kids: bool) -> Settings:
+    """Mark a library as for children (child profiles see only these), or not."""
+    doc = _load_doc(config_file)
+    for t in doc.get("libraries") or []:
+        if str(t.get("name", "")).casefold() == name.casefold():
+            if kids:
+                t["kids"] = True
+            elif "kids" in t:
+                del t["kids"]
+            return _write_doc(config_file, doc)
+    raise ConfigError(f"no library named {name!r}")

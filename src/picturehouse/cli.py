@@ -50,6 +50,10 @@ theme_app = typer.Typer(
     help="List, check and install themes (docs/themes.md).", no_args_is_help=True
 )
 app.add_typer(theme_app, name="theme")
+profile_app = typer.Typer(
+    help="Profiles: who's watching, child profiles and the exit code.", no_args_is_help=True
+)
+app.add_typer(profile_app, name="profile")
 
 
 @dataclass(frozen=True)
@@ -399,6 +403,123 @@ def library_list(ctx: typer.Context) -> None:
         last = root.last_scan_at.strftime("%Y-%m-%d %H:%M") if root.last_scan_at else "never"
         typer.echo(f"{root.name:<14} {root.kind:<12} {count:>6} items  {status:<8} "
                    f"scanned {last}  {root.path}")  # fmt: skip
+
+
+@library_app.command("kids")
+@handles_errors
+def library_kids(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Library name")],
+    off: Annotated[bool, typer.Option("--off", help="No longer a kids library")] = False,
+) -> None:
+    """Mark a library as for children: child profiles see only kids libraries."""
+    from picturehouse.library.roots import set_root_kids
+
+    st: AppState = ctx.obj
+    set_root_kids(st.config_file, name, not off)
+    typer.echo(f"{name}: {'not ' if off else ''}a kids library (a running server: after a restart, "
+               "or change it live in Library -> Profiles)")  # fmt: skip
+
+
+def _profiles(st: AppState):
+    from picturehouse.profiles import ProfileStore
+
+    return ProfileStore(st.services().db, st.layout.root)
+
+
+@profile_app.command("list")
+@handles_errors
+def profile_list(ctx: typer.Context) -> None:
+    """Profiles, the devices using each, and kids libraries."""
+    st: AppState = ctx.obj
+    store = _profiles(st)
+    devices = store.devices()
+    for p in store.profiles():
+        on = sorted(a for a, pid in devices.items() if pid == p.id)
+        kind = "child" if p.child else "adult"
+        extra = "  (devices not set use this)" if p.id == 1 else ""
+        typer.echo(f"{p.id:>3}  {p.name:<20} {kind:<6} {', '.join(on) or '-'}{extra}")
+    kids = [r.name for r in st.load().libraries if r.kids]
+    typer.echo(f"\nkids libraries: {', '.join(kids) or 'none (child profiles see nothing)'}")
+    typer.echo(f"exit code: {'set' if store.code_set else 'not set'}")
+
+
+@profile_app.command("add")
+@handles_errors
+def profile_add(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="e.g. Sam")],
+    child: Annotated[bool, typer.Option("--child", help="Kids libraries only")] = False,
+) -> None:
+    """Add a profile."""
+    store = _profiles(ctx.obj)
+    if child and not store.code_set:
+        raise PictureHouseError("set an exit code first", hint="picturehouse profile exit-code")
+    p = store.add(name, child)
+    typer.echo(f"added {'child ' if p.child else ''}profile {p.name!r} (id {p.id})")
+
+
+@profile_app.command("edit")
+@handles_errors
+def profile_edit(
+    ctx: typer.Context,
+    profile: Annotated[str, typer.Argument(help="Name or id")],
+    name: Annotated[str | None, typer.Option("--name", help="New name")] = None,
+    child: Annotated[bool | None, typer.Option("--child/--adult", help="Child or adult")] = None,
+) -> None:
+    """Rename a profile, or make it a child or adult profile."""
+    store = _profiles(ctx.obj)
+    p = store.update(store.find(profile).id, name=name, child=child)
+    typer.echo(f"{p.name}: {'child' if p.child else 'adult'} profile")
+
+
+@profile_app.command("remove")
+@handles_errors
+def profile_remove(
+    ctx: typer.Context, profile: Annotated[str, typer.Argument(help="Name or id")]
+) -> None:
+    """Remove a profile (its devices go back to the main profile; its watch history goes)."""
+    store = _profiles(ctx.obj)
+    p = store.find(profile)
+    store.remove(p.id)
+    typer.echo(f"removed profile {p.name!r}")
+
+
+@profile_app.command("assign")
+@handles_errors
+def profile_assign(
+    ctx: typer.Context,
+    address: Annotated[
+        str, typer.Argument(help="The device's IP address (see the console's device list)")
+    ],
+    profile: Annotated[str, typer.Argument(help="Name or id")],
+) -> None:
+    """Put a device in a profile, e.g. a child's tablet or TV."""
+    store = _profiles(ctx.obj)
+    p = store.find(profile)
+    store.assign(address, p.id)
+    typer.echo(f"{address} now uses {p.name}")
+
+
+@profile_app.command("exit-code")
+@handles_errors
+def profile_exit_code(
+    ctx: typer.Context,
+    remove: Annotated[bool, typer.Option("--remove", help="Remove the exit code")] = False,
+) -> None:
+    """Set the code that leaves a child profile (asked for, not shown)."""
+    store = _profiles(ctx.obj)
+    if remove:
+        store.set_code(None)
+        typer.echo("exit code removed")
+        return
+    if sys.stdin.isatty():
+        code = typer.prompt("New exit code (4 to 12 digits)", hide_input=True,
+                            confirmation_prompt=True)  # fmt: skip
+    else:  # piped (scripts, `docker exec` without -t): the first line of input
+        code = sys.stdin.readline()
+    store.set_code(code.strip())
+    typer.echo("exit code set")
 
 
 @app.command("scan")

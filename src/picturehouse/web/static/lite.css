@@ -61,3 +61,9 @@ h2 { font-size: 19px; margin: 26px 0 10px; }
 .pl video { display: block; width: 100%; background: #000; }
 .pl audio { display: block; width: 100%; }
 .photo { display: block; max-width: 100%; max-height: 80vh; margin: 10px auto 0; }
+
+/* Who's watching (/lite/profiles). */
+.prof { margin: 0 0 10px; }
+.prof .code { display: block; margin: 0 0 6px; padding: 9px 12px; width: 180px; font-size: 16px;
+  border-radius: 8px; border: 1px solid #243041; background: #121821; color: #eef1f4; }
+p.btn { display: inline-block; }

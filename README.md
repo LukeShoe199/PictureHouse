@@ -17,6 +17,9 @@ and browsers around the house.
   Anything else is converted on the fly with FFmpeg.
 - **Remembers where you were** on every device, audiobooks included.
   There are also photo slideshows with music and a music visualiser.
+- **Profiles.** Each device has a profile with its own Continue watching.
+  A child profile only sees the kids libraries you choose, and leaving it
+  needs an exit code.
 - **Themes.** Pick a look per device or for everyone: the original PictureHouse style, or
   *iStream*, inspired by Apple TV. Make your own with the theme language in
   [docs/themes.md](docs/themes.md).

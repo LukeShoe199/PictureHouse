@@ -43,10 +43,11 @@ from picturehouse.db.models import (
 )
 from picturehouse.errors import PictureHouseError
 from picturehouse.library.photos import WEB_SAFE
-from picturehouse.library.roots import add_root, remove_root, set_config_values
+from picturehouse.library.roots import add_root, remove_root, set_config_values, set_root_kids
 from picturehouse.log import LOG_FILE_NAME
 from picturehouse.metadata.api_client import MetadataApiError
 from picturehouse.paths import long_path, resolve_in_root
+from picturehouse.profiles import SCOPE, ProfileError, ProfileStore
 from picturehouse.services import Services
 from picturehouse.streaming import images, procs
 from picturehouse.streaming import levels as levels_mod
@@ -132,6 +133,33 @@ class StreamingSettings(BaseModel):
 class AudioCheckRequest(BaseModel):
     force: bool = False
     item_ids: list[int] | None = None
+
+
+class NewProfile(BaseModel):
+    name: str
+    child: bool = False
+
+
+class ProfileEdit(BaseModel):
+    name: str | None = None
+    child: bool | None = None
+
+
+class ProfileSwitch(BaseModel):
+    id: int
+    code: str | None = None
+
+
+class ExitCodeSetting(BaseModel):
+    code: str | None = None  # None removes it
+
+
+class DeviceProfileSetting(BaseModel):
+    profile_id: int
+
+
+class LibraryEdit(BaseModel):
+    kids: bool
 
 
 class AdminLogin(BaseModel):
@@ -245,6 +273,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     app.state.tracker = tracker
     gate = access.AdminGate(svc.layout.root)
     app.state.admin_gate = gate
+    profiles = ProfileStore(svc.db, svc.layout.root)
+    app.state.profiles = profiles
     api = APIRouter(prefix="/api")
 
     def client_host(request: Request) -> str:
@@ -256,6 +286,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
         )
 
     def is_admin(request: Request) -> bool:
+        if profiles.for_device(client_host(request)).child:
+            return False  # a child profile changes nothing, even on this PC
         if on_this_pc(request):
             return True
         return gate.pin_set and gate.check_cookie(request.cookies.get(access.COOKIE))
@@ -274,6 +306,14 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
                           else "only allowed on the PC running PictureHouse")  # fmt: skip
                 return JSONResponse({"detail": detail, "admin_required": True,
                                      "pin_set": gate.pin_set}, 403)  # fmt: skip
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def profile_scope(request: Request, call_next):
+        """What this device's profile may see (picturehouse.profiles): set for
+        the request, read by every query. DLNA isn't filtered."""
+        if request.url.path.startswith(("/api/", "/lite")):
+            SCOPE.set(profiles.scope_for(client_host(request)))
         return await call_next(request)
 
     @app.middleware("http")
@@ -317,8 +357,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
 
     def get_item(s, item_id: int) -> MediaItem:
         item = s.get(MediaItem, item_id)
-        if item is None:
-            raise HTTPException(404, "no such item")
+        if item is None or (SCOPE.get().kids_only and not item.root.kids):
+            raise HTTPException(404, "no such item")  # a child profile can't see it either
         return item
 
     def item_path(item: MediaItem) -> Path:
@@ -517,7 +557,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             kinds = kinds | ((MediaItem.kind == "track") & (MediaItem.duration > 20 * 60))
         with svc.db.session() as s:
             q = (Q.visible().join(PlaybackState, PlaybackState.item_id == MediaItem.id)
-                 .where(PlaybackState.position > 5, PlaybackState.completed.is_(False), kinds)
+                 .where(PlaybackState.profile_id == SCOPE.get().profile_id,
+                        PlaybackState.position > 5, PlaybackState.completed.is_(False), kinds)
                  .order_by(PlaybackState.updated_at.desc()).limit(limit))  # fmt: skip
             return {"items": Q.items_json(s, list(s.scalars(q)))}
 
@@ -547,8 +588,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     def item_detail(item_id: int):
         with svc.db.session() as s:
             i = get_item(s, item_id)
-            prog = s.get(PlaybackState, item_id)
-            data = Q.item_json(i, prog)
+            data = Q.item_json(i, Q.progress_of(s, item_id))
             streams = [{
                 "index": st.index, "type": st.type, "codec": st.codec, "language": st.language,
                 "title": st.title, "channels": st.channels, "default": st.is_default,
@@ -723,8 +763,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             # Upsert: two first-time saves arriving together used to both INSERT.
             s.execute(
                 sqlite_insert(PlaybackState)
-                .values(item_id=item_id, **values)
-                .on_conflict_do_update(index_elements=["item_id"], set_=values)
+                .values(profile_id=SCOPE.get().profile_id, item_id=item_id, **values)
+                .on_conflict_do_update(index_elements=["profile_id", "item_id"], set_=values)
             )
         return Response(status_code=204)
 
@@ -866,7 +906,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
                 .group_by(LibraryRootRow.id).order_by(LibraryRootRow.name)
             ).all()  # fmt: skip
         return {"libraries": [
-            {"name": r.name, "path": r.path, "kind": r.kind, "available": r.available,
+            {"name": r.name, "path": r.path, "kind": r.kind, "kids": r.kids, "available": r.available,
              "unavailable_since": Q.iso(r.unavailable_since), "items": n, "bytes": b or 0,
              "last_scan_at": Q.iso(r.last_scan_at)}
             for r, n, b in rows]}  # fmt: skip
@@ -880,6 +920,16 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             raise HTTPException(400, e.message) from e
         lib = next((x for x in libraries()["libraries"] if x["name"] == body.name.strip()), None)
         return lib
+
+    @api.put("/libraries/{name}")
+    def edit_library(name: str, body: LibraryEdit):
+        """Mark a library as for children (child profiles see only these)."""
+        try:
+            set_root_kids(svc.config_file, name, body.kids)
+            svc.reload_settings()
+        except PictureHouseError as e:
+            raise HTTPException(404, e.message) from e
+        return next(x for x in libraries()["libraries"] if x["name"].casefold() == name.casefold())
 
     @api.delete("/libraries/{name}", status_code=204)
     def delete_library(name: str):
@@ -1253,7 +1303,65 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             rows = list(s.scalars(select(Device).order_by(Device.last_seen.desc())))
         return {"devices": [
             {"address": d.address, "user_agent": d.user_agent, "name": device_name(d.user_agent),
-             "via": d.via, "last_seen": Q.iso(d.last_seen)} for d in rows]}  # fmt: skip
+             "via": d.via, "last_seen": Q.iso(d.last_seen),
+             "profile_id": profiles.for_device(d.address).id} for d in rows]}  # fmt: skip
+
+    @api.put("/devices/{address}/profile")
+    def set_device_profile(address: str, body: DeviceProfileSetting):
+        """Admin: put a device (e.g. a child's tablet or TV) in a profile."""
+        try:
+            profiles.assign(address, body.profile_id)
+        except ProfileError as e:
+            raise HTTPException(e.status, e.message) from e
+        return {"address": address, "profile": profiles.for_device(address).json()}
+
+    # ------------------------------------------------------------ profiles
+
+    def profiles_state(request: Request) -> dict:
+        me = profiles.for_device(client_host(request))
+        return {"profiles": [p.json() for p in profiles.profiles()], "current": me.json(),
+                "exit_code_set": profiles.code_set}  # fmt: skip
+
+    def profile_call(fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ProfileError as e:
+            raise HTTPException(e.status, e.message) from e
+
+    @api.get("/profiles")
+    def list_profiles(request: Request):
+        return profiles_state(request)
+
+    @api.put("/profiles/current")
+    def switch_profile(body: ProfileSwitch, request: Request):
+        """This device changes profile. Leaving a child profile needs the exit
+        code (any device may try: access.OPEN_WRITES; wrong codes are rate-limited)."""
+        who = client_host(request)
+        before = profiles.for_device(who)
+        p = profile_call(profiles.switch, who, body.id, body.code)
+        if before.id != p.id:
+            log.info("profile changed", extra={"client": who, "from": before.name, "to": p.name})
+        return profiles_state(request)
+
+    @api.post("/profiles", status_code=201)
+    def create_profile(body: NewProfile):
+        if body.child and not profiles.code_set:
+            raise HTTPException(400, "set an exit code first, so a child profile can be left")
+        return profile_call(profiles.add, body.name, body.child).json()
+
+    @api.put("/profiles/{profile_id}")
+    def edit_profile(profile_id: int, body: ProfileEdit):
+        return profile_call(profiles.update, profile_id, name=body.name, child=body.child).json()
+
+    @api.delete("/profiles/{profile_id}", status_code=204)
+    def delete_profile(profile_id: int):
+        profile_call(profiles.remove, profile_id)
+        return Response(status_code=204)
+
+    @api.put("/profiles-exit-code", status_code=204)
+    def set_exit_code(body: ExitCodeSetting):
+        profile_call(profiles.set_code, body.code)
+        return Response(status_code=204)
 
     # ------------------------------------------------------------ admin access
 

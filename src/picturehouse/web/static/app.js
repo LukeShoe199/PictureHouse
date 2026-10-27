@@ -283,7 +283,8 @@ function updateAmbient() {
 const S = {
   route: { name: 'home', arg: null, q: new URLSearchParams() },
   tok: 0, current: null, feat: 0, season: {}, status: null,
-  lib: { adding: false, justAdded: null, confirm: null },
+  lib: { adding: false, justAdded: null, confirm: null, renaming: null },
+  profiles: null,  // /api/profiles: who's watching on this device
   sheet: null, undo: null, msettings: null
 };
 const ITEMS = new Map(); // id -> item, filled as cards are drawn (used to build music queues)
@@ -331,7 +332,10 @@ function continueCard(it) {
     url: it.art && (it.kind === 'film' ? it.art.backdrop : it.art.thumb), seed: isEp ? epSeed(it) : it.title, pct: pctOf(it), unav: it.available === false });
 }
 const row = (title, href, cards) => cards ? `<section class="sec"><div class="sec-head"><h2>${esc(title)}</h2>${href ? `<button class="link" data-nav data-href="${esc(href)}">See all</button>` : ''}</div><div class="row">${cards}</div></section>` : '';
-const emptyBox = (msg, withLink = true) => `<div class="panel empty"><p>${esc(msg)}</p>${withLink ? '<button class="btn small" data-nav data-href="#/library">Open Library</button>' : ''}</div>`;
+const childName = () => S.profiles && S.profiles.current && S.profiles.current.child ? S.profiles.current.name : null;
+const emptyBox = (msg, withLink = true) => childName()
+  ? `<div class="panel empty"><p>${esc(`Nothing here for ${childName()} yet.`)}</p></div>`  // a child can't add folders
+  : `<div class="panel empty"><p>${esc(msg)}</p>${withLink ? '<button class="btn small" data-nav data-href="#/library">Open Library</button>' : ''}</div>`;
 const backBtn = () => `<button class="back" data-nav data-back>${ico('back')} Back</button>`;
 /* ---------- Metadata (Phase 2) ---------- */
 const fmtRating = r => r != null && isFinite(+r) && +r > 0 ? `★ ${(+r).toFixed(1)}` : '';
@@ -682,13 +686,14 @@ VIEWS.library = {
   title: 'Library',
   async load() {
     const soft = p => api(p).catch(e => ({ _err: e.message }));
-    const [status, libs, problems, devices, scan, unmatched, admin, themes] = await Promise.all([
+    const [status, libs, problems, devices, scan, unmatched, admin, themes, profiles] = await Promise.all([
       api('/api/status'), api('/api/libraries'), api('/api/problems'), soft('/api/devices'), api('/api/scan'),
-      soft('/api/unmatched'), soft('/api/admin'), soft('/api/themes')]);
+      soft('/api/unmatched'), soft('/api/admin'), soft('/api/themes'), soft('/api/profiles')]);
     // Settings are admin-only; other devices see a note instead of an error.
     const [msettings, ssettings] = admin.admin ? await Promise.all([soft('/api/settings/metadata'), soft('/api/settings/streaming')]) : [null, null];
     S.status = status; S.admin = admin;
-    return { status, libs: libs.libraries || [], problems, devices: devices.devices || null, scan, unmatched, msettings, ssettings, admin, themes };
+    if (profiles && !profiles._err) setProfiles(profiles);
+    return { status, libs: libs.libraries || [], problems, devices: devices.devices || null, scan, unmatched, msettings, ssettings, admin, themes, profiles };
   },
   after(d) {
     if (d.scan && d.scan.running) pollScan();
@@ -748,8 +753,11 @@ VIEWS.library = {
           <button class="cand" data-nav data-act="audio-dismiss" data-id="${esc(a.id)}" data-file="${esc(a.file)}">It's fine, dismiss</button></div></div>`).join('');
     const dlna = d.status.dlna || {};
     const name = (d.status.server && d.status.server.name) || 'PictureHouse';
+    const plist = (d.profiles && d.profiles.profiles) || [];
+    const devProfile = x => x.via === 'dlna' ? '<span class="note">Everything (DLNA)</span>'
+      : `<select data-nav data-devprof="${esc(x.address)}" aria-label="Profile for ${esc(x.name || x.address)}">${plist.map(p => `<option value="${p.id}"${p.id === x.profile_id ? ' selected' : ''}>${esc(p.name)}${p.child ? ' (child)' : ''}</option>`).join('')}</select>`;
     const dev = (d.devices || []).map(x => `<tr><td>${esc(x.name || x.address)}</td><td>${x.via === 'dlna' ? 'DLNA' : x.via === 'web' ? 'Web browser' : esc(x.via)}</td>
-        <td class="mono">${esc(x.address)}</td><td class="ua" title="${esc(x.user_agent)}">${esc(x.user_agent || '—')}</td><td>${esc(relTime(x.last_seen))}</td></tr>`).join('');
+        <td class="mono">${esc(x.address)}</td><td>${devProfile(x)}</td><td class="ua" title="${esc(x.user_agent)}">${esc(x.user_agent || '—')}</td><td>${esc(relTime(x.last_seen))}</td></tr>`).join('');
     const ro = d.admin && !d.admin._err && !d.admin.admin;
     return `${ro ? '<div class="viewonly">' : '<div>'}<div class="page-head"><div><h1>Library</h1><p>Folders, scans, matching and the devices on your network.</p></div></div>
       ${adminHTML(d.admin)}
@@ -765,6 +773,7 @@ VIEWS.library = {
       <section class="sec"><div class="sec-head"><h2>Online metadata</h2></div>${d.admin.admin ? metaPanelHTML(d.msettings, mst)
         : `<div class="panel"><p class="note">${esc(metaStatus(mst).pill)}. Keys and matching settings can be changed on the PC running PictureHouse${d.admin.pin_set ? ', or here after entering the admin PIN above' : ''}.</p></div>`}</section>
       <section class="sec" id="appearance-sec"><div class="sec-head"><h2>Appearance</h2></div>${appearanceHTML(d.themes, d.admin.admin)}</section>
+      <section class="sec" id="profiles-sec"><div class="sec-head"><h2>Profiles</h2></div>${profilesHTML(d.profiles, d.admin.admin, d.libs)}</section>
       <section class="sec"><div class="sec-head"><h2>DLNA</h2></div>
         <div class="panel">${dlna.enabled
           ? `${(dlna.addresses || []).length ? `<ul class="addrs">${dlna.addresses.map(a => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}<p class="note">TVs and apps such as VLC find this server automatically as “${esc(name)}”.</p>`
@@ -773,10 +782,164 @@ VIEWS.library = {
       <section class="sec" id="phones-sec"><div class="sec-head"><h2>Phones &amp; tablets</h2></div>${androidHTML(d.status)}${phonesHTML(d.status)}</section>
       <section class="sec"><div class="sec-head"><h2>Devices on your network</h2></div>
         ${!d.devices ? '<div class="panel"><p class="note">The device list is shown on the PC running PictureHouse, or here after entering the admin PIN.</p></div>'
-          : d.devices.length ? `<div class="panel tablewrap" style="padding-block:4px"><table><thead><tr><th>Device</th><th>Connects by</th><th>Address</th><th>Software</th><th>Last seen</th></tr></thead><tbody>${dev}</tbody></table></div>`
+          : d.devices.length ? `<div class="panel tablewrap" style="padding-block:4px"><table><thead><tr><th>Device</th><th>Connects by</th><th>Address</th><th>Profile</th><th>Software</th><th>Last seen</th></tr></thead><tbody>${dev}</tbody></table></div>`
           : '<div class="panel"><p class="note">No devices seen yet. Browsers and TVs appear here once they connect.</p></div>'}</section></div>`;
   }
 };
+
+/* Profiles (picturehouse.profiles). Each device uses one profile, kept by the
+   server (so clearing the browser changes nothing). Child profiles see kids
+   libraries only; leaving one needs the exit code. Changing profile reloads
+   the page so every list is fetched again for the new profile. */
+function setProfiles(p) {
+  S.profiles = p;
+  const child = !!(p && p.current && p.current.child);
+  if (child) document.documentElement.dataset.child = ''; else delete document.documentElement.dataset.child;
+  renderProfBtn();
+}
+async function loadProfiles() {
+  try { setProfiles(await api('/api/profiles')); } catch (e) { /* older server: no profiles */ }
+}
+function renderProfBtn() {
+  const b = $('#profbtn'), p = S.profiles;
+  // One profile and no child ones: nothing to choose, keep the bar as it was.
+  if (!p || p.profiles.length < 2) { b.hidden = true; return; }
+  const me = p.current;
+  b.hidden = false;
+  b.classList.toggle('child', me.child);
+  b.innerHTML = `<span class="pav" aria-hidden="true">${esc(me.name.slice(0, 1).toUpperCase())}</span><strong>${esc(me.name)}</strong>`;
+  b.setAttribute('aria-label', `Profile: ${me.name}. Change profile`);
+}
+function renderProfMenu() {
+  const p = S.profiles; if (!p) return;
+  const opts = p.profiles.map(x => `<button class="devopt ${x.id === p.current.id ? 'on' : ''}" data-nav data-profsel="${x.id}">
+      <b>${esc(x.name)}</b><small>${x.child ? 'Child: kids libraries only' : 'Everything'}</small><span class="tick">${ico('check')}</span></button>`).join('');
+  const note = p.current.child ? '<p class="devnote">Leaving this child profile needs the exit code.</p>' : '';
+  $('#profmenu').innerHTML = `<h3>Who's watching?</h3>${opts}${note}`;
+}
+function toggleProfMenu(open) {
+  const m = $('#profmenu'); const show = open == null ? m.hidden : open;
+  if (show && m.hidden) renderProfMenu();
+  m.hidden = !show;
+  $('#profbtn').setAttribute('aria-expanded', String(show));
+  if (show) { const on = m.querySelector('.devopt.on'); if (on) on.focus(); }
+}
+async function pickProfile(id, code) {
+  const p = S.profiles; if (!p) return;
+  const target = p.profiles.find(x => x.id === id);
+  if (!target || id === p.current.id) { toggleProfMenu(false); return; }
+  if (p.current.child && !target.child && code == null) { toggleProfMenu(false); openCodeSheet(target); return; }
+  try {
+    const res = await api('/api/profiles/current', { method: 'PUT', body: { id, code } });
+    setProfiles(res);
+    location.reload();
+  } catch (e) {
+    if (S.sheet && S.sheet.mode === 'code') { const err = $('#codeerr'); err.textContent = e.message; err.hidden = false; const i = $('#codeform input'); i.value = ''; i.focus(); }
+    else toast('Could not change profile: ' + e.message);
+  }
+}
+function openCodeSheet(target) {
+  openSheet({ mode: 'code', target });
+  $('#sheetBox').innerHTML = `${sheetHead('Leave the child profile', `Switch to ${target.name}`)}
+    <form class="codeform" id="codeform" novalidate autocomplete="off">
+      <label class="field">Exit code<input name="code" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="off" data-nav></label>
+      <div class="formbtns"><button type="submit" class="btn primary small" data-nav>Switch</button><button type="button" class="btn small" data-nav data-act="sheet-close">Cancel</button></div>
+      <p class="formerr" id="codeerr" role="alert" hidden></p></form>`;
+  setTimeout(() => focusSel('#codeform input'), 50);
+}
+function profilesHTML(p, admin, libs) {
+  if (!p || p._err) return `<div class="panel"><p class="note">Profiles couldn't be loaded${p && p._err ? `: ${esc(p._err)}` : ''}.</p></div>`;
+  const L = S.lib;
+  const kids = libs.filter(l => l.kids).map(l => l.name);
+  const intro = `<p class="note">Each device uses one profile (pick it with the button at the top). A <b>child</b> profile only sees the libraries ticked below${kids.length ? '' : ' (none yet, so it sees nothing)'}; leaving it needs the exit code. Each profile has its own Continue watching. TVs browsing over DLNA see everything.</p>`;
+  if (!admin) {
+    return `<div class="panel">${intro}<ul class="addrs">${p.profiles.map(x => `<li>${esc(x.name)}${x.child ? ' (child)' : ''}</li>`).join('')}</ul>
+      <p class="note">Profiles are managed on the PC running PictureHouse, or here after entering the admin PIN.</p></div>`;
+  }
+  const rows = p.profiles.map(x => {
+    const confirming = L.confirm === 'profile:' + x.id;
+    const name = L.renaming === x.id
+      ? `<form class="pathrow" id="renameform" data-id="${x.id}" novalidate autocomplete="off"><input name="name" value="${esc(x.name)}" maxlength="40" aria-label="New name" data-nav><button type="submit" class="btn small" data-nav>Save</button></form>`
+      : `${esc(x.name)}${x.id === p.current.id ? '<span class="pill quiet">This device</span>' : ''}`;
+    const main = x.id === 1;
+    return `<tr><td>${name}</td><td>${x.child ? '<span class="pill">Child</span>' : 'Adult'}${main ? ' · devices not set use this' : ''}</td>
+      <td class="num">${L.renaming === x.id ? '' : `<button class="rowbtn" data-nav data-act="prof-rename" data-id="${x.id}">Rename</button>`}
+        ${main ? '' : `<button class="rowbtn" data-nav data-act="prof-kind" data-id="${x.id}" data-child="${x.child ? '0' : '1'}">${x.child ? 'Make adult' : 'Make child'}</button>
+        <button class="rowbtn${confirming ? ' danger' : ''}" data-nav data-act="prof-remove" data-id="${x.id}">${confirming ? 'Confirm remove' : 'Remove'}</button>`}</td></tr>`;
+  }).join('');
+  const kidsBoxes = libs.length
+    ? `<div class="kidslibs">${libs.map(l => `<label><input type="checkbox" data-nav data-kidslib="${esc(l.name)}"${l.kids ? ' checked' : ''}> ${esc(l.name)}</label>`).join('')}</div>`
+    : '<p class="note">Add a folder first.</p>';
+  return `<div class="panel">${intro}
+      <div class="tablewrap profiles"><table><thead><tr><th>Profile</th><th>Kind</th><th><span hidden>Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <form class="form" id="profadd" novalidate autocomplete="off" style="margin-top:12px">
+        <label class="field">New profile<input name="name" maxlength="40" placeholder="e.g. Sam" data-nav></label>
+        <label class="check"><input type="checkbox" name="child" data-nav> Child profile</label>
+        <div class="formbtns"><button type="submit" class="btn small" data-nav>Add profile</button></div></form>
+      <p class="formerr" id="proferr" role="alert" hidden></p></div>
+    <div class="two">
+      <div class="panel"><h3>Kids libraries</h3><p class="note">Child profiles see only these.</p>${kidsBoxes}</div>
+      <form class="panel" id="exitform" novalidate autocomplete="off"><h3>Exit code</h3>
+        <p class="note">${p.exit_code_set ? 'Set. Asked for when leaving a child profile.' : 'Not set yet. Needed before any device can use a child profile.'} Separate from the admin PIN.</p>
+        <label class="field">${p.exit_code_set ? 'New exit code' : 'Exit code'}<input name="code" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="12" autocomplete="new-password" placeholder="4 to 12 digits" data-nav></label>
+        <div class="formbtns"><button type="submit" class="btn small" data-nav>${p.exit_code_set ? 'Change code' : 'Set code'}</button></div>
+        <p class="formerr" id="exiterr" role="alert" hidden></p></form>
+    </div>`;
+}
+async function profAct(name, btn) {
+  const L = S.lib, id = +btn.dataset.id;
+  const done = (msg) => { if (msg) toast(msg); route({ keepScroll: true }); loadProfiles(); };
+  const fail = e => { btn.disabled = false; toast(e.message); };
+  if (name === 'prof-rename') { L.renaming = id; redraw('#renameform input'); return; }
+  if (name === 'prof-kind') {
+    btn.disabled = true;
+    try { await api(`/api/profiles/${id}`, { method: 'PUT', body: { child: btn.dataset.child === '1' } }); done(); } catch (e) { fail(e); }
+    return;
+  }
+  if (name === 'prof-remove') {
+    const k = 'profile:' + id;
+    if (L.confirm !== k) {
+      L.confirm = k; redraw(`[data-act="prof-remove"][data-id="${id}"]`);
+      clearTimeout(confirmT); confirmT = setTimeout(() => { if (L.confirm === k && S.route.name === 'library') { L.confirm = null; redraw(focusKey(document.activeElement)); } }, 5000);
+      return;
+    }
+    L.confirm = null; btn.disabled = true;
+    try { await api(`/api/profiles/${id}`, { method: 'DELETE' }); done('Profile removed. Its devices use the main profile now.'); } catch (e) { fail(e); }
+  }
+}
+async function submitProfileForm(f) {
+  const err = $(f.id === 'exitform' ? '#exiterr' : '#proferr');
+  const show = m => { err.textContent = m; err.hidden = false; };
+  const btn = f.querySelector('[type=submit]');
+  try {
+    btn.disabled = true; err.hidden = true;
+    if (f.id === 'profadd') {
+      const name = f.elements.name.value.trim();
+      if (!name) { show('Give the profile a name.'); btn.disabled = false; f.elements.name.focus(); return; }
+      await api('/api/profiles', { method: 'POST', body: { name, child: f.elements.child.checked } });
+      toast(`Added “${name}”`);
+    } else if (f.id === 'exitform') {
+      const code = f.elements.code.value.trim();
+      if (!/^\d{4,12}$/.test(code)) { show('The exit code is 4 to 12 digits.'); btn.disabled = false; f.elements.code.focus(); return; }
+      await api('/api/profiles-exit-code', { method: 'PUT', body: { code } });
+      toast('Exit code saved');
+    } else if (f.id === 'renameform') {
+      await api(`/api/profiles/${+f.dataset.id}`, { method: 'PUT', body: { name: f.elements.name.value } });
+      S.lib.renaming = null;
+    }
+    route({ keepScroll: true }); loadProfiles();
+  } catch (e) { btn.disabled = false; if (f.id === 'renameform') toast(e.message); else show(e.message); }
+}
+document.addEventListener('change', async e => {
+  const t = e.target, ds = t.dataset || {};
+  if (ds.kidslib) {
+    try { await api(`/api/libraries/${enc(ds.kidslib)}`, { method: 'PUT', body: { kids: t.checked } }); toast(`${ds.kidslib}: ${t.checked ? 'child profiles can see it' : 'hidden from child profiles'}`); route({ keepScroll: true }); }
+    catch (er) { t.checked = !t.checked; toast(er.message); }
+  } else if (ds.devprof) {
+    try { await api(`/api/devices/${enc(ds.devprof)}/profile`, { method: 'PUT', body: { profile_id: +t.value } }); toast(`${ds.devprof} now uses ${t.options[t.selectedIndex].text}`); loadProfiles(); }
+    catch (er) { toast(er.message); route({ keepScroll: true }); }
+  }
+});
 
 /* Themes (docs/themes.md): each device can pick its own; the admin sets everyone's default.
    The choice is the #themecss <link> (index.html), so switching needs no reload. */
@@ -2217,11 +2380,13 @@ function queueFrom(btn) {
 document.addEventListener('click', e => {
   if (e.target === sheetEl) { closeSheet(); return; }
   const t = e.target.closest('button');
-  if (!t) { if (!e.target.closest('.devwrap')) toggleDevMenu(false); return; }
+  if (!t) { if (!e.target.closest('.devwrap')) { toggleDevMenu(false); toggleProfMenu(false); } return; }
   const ds = t.dataset;
-  if (t.id === 'devbtn') { e.stopPropagation(); toggleDevMenu(); return; }
-  if (!t.closest('.devwrap')) toggleDevMenu(false);
+  if (t.id === 'devbtn') { e.stopPropagation(); toggleProfMenu(false); toggleDevMenu(); return; }
+  if (t.id === 'profbtn') { e.stopPropagation(); toggleDevMenu(false); toggleProfMenu(); return; }
+  if (!t.closest('.devwrap')) { toggleDevMenu(false); toggleProfMenu(false); }
   if ('devsel' in ds) { pickDevice(ds.devsel); return; }
+  if ('profsel' in ds) { pickProfile(+ds.profsel); return; }
   if (ds.href && t.closest('#devmenu')) toggleDevMenu(false);
   if (t.id === 'installbtn') { installApp(); return; }
   if (ds.href) { S.morphFrom = t.matches('.card') ? t.querySelector('.art') : null; nav(ds.href, { focusFirst: true }); return; }
@@ -2356,6 +2521,7 @@ async function act(name, btn) {
     } catch (e) { btn.disabled = false; toast('Could not undo your changes: ' + e.message); redraw(); }
     return;
   }
+  if (name.startsWith('prof-')) { profAct(name, btn); return; }
   if (name === 'add') { L.adding = true; L.justAdded = null; redraw('#addform input[name=name]'); return; }
   if (name === 'theme-use') { applyTheme(btn.dataset.theme); redraw('#appearance-sec .theme.on'); return; }
   if (name === 'theme-follow') { applyTheme(null); redraw('#appearance-sec .theme.on'); return; }
@@ -2431,6 +2597,8 @@ document.addEventListener('submit', e => {
   else if (f.id === 'metaform') { e.preventDefault(); submitMeta(f); }
   else if (f.id === 'streamform') { e.preventDefault(); submitStreaming(f); }
   else if (f.id === 'pinform' || f.id === 'loginform') { e.preventDefault(); submitPin(f, f.id === 'loginform'); }
+  else if (f.id === 'profadd' || f.id === 'exitform' || f.id === 'renameform') { e.preventDefault(); submitProfileForm(f); }
+  else if (f.id === 'codeform') { e.preventDefault(); const code = f.elements.code.value.trim(); if (S.sheet && S.sheet.target) pickProfile(S.sheet.target.id, code); }
 });
 async function submitEdit(f) {
   const sh = S.sheet; if (!sh || sh.mode !== 'edit') return;
@@ -2586,5 +2754,5 @@ window.PHConsole = {
 registerSW();
 refreshStatus();
 setInterval(refreshStatus, 30000);
-route();
+loadProfiles().then(() => route());  // the profile first: a child's pages read differently
 })();

@@ -19,6 +19,7 @@ from picturehouse.db.models import (
     is_hdr,
 )
 from picturehouse.library.naming import split_year
+from picturehouse.profiles import SCOPE
 
 VIDEO_KINDS = ("film", "episode", "home_video")
 
@@ -36,12 +37,21 @@ def decode_key(key: str) -> list[str]:
         return []
 
 
+def in_scope():
+    """Libraries this request may see: configured ones, and for a child
+    profile only kids libraries (see picturehouse.profiles). Every query that
+    lists or finds items joins LibraryRootRow and uses this."""
+    if SCOPE.get().kids_only:
+        return and_(LibraryRootRow.configured, LibraryRootRow.kids)
+    return LibraryRootRow.configured
+
+
 def visible() -> Select:
-    """Items a client may browse: probed fine, file present, library configured."""
+    """Items a client may browse: probed fine, file present, library in scope."""
     return (
         select(MediaItem)
         .join(LibraryRootRow)
-        .where(MediaItem.available, MediaItem.probe_ok, LibraryRootRow.configured)
+        .where(MediaItem.available, MediaItem.probe_ok, in_scope())
     )
 
 
@@ -102,8 +112,14 @@ def progress_map(s: Session, ids: Iterable[int]) -> dict[int, PlaybackState]:
     ids = list(ids)
     if not ids:
         return {}
-    rows = s.scalars(select(PlaybackState).where(PlaybackState.item_id.in_(ids)))
+    rows = s.scalars(select(PlaybackState).where(
+        PlaybackState.profile_id == SCOPE.get().profile_id, PlaybackState.item_id.in_(ids)))  # fmt: skip
     return {r.item_id: r for r in rows}
+
+
+def progress_of(s: Session, item_id: int) -> PlaybackState | None:
+    """This profile's progress on one item."""
+    return s.get(PlaybackState, (SCOPE.get().profile_id, item_id))
 
 
 def metadata_json(obj) -> dict:
@@ -195,7 +211,7 @@ def shows(s: Session, sort: str = "added", where=None) -> list[dict]:
         .where(
             MediaItem.available,
             MediaItem.probe_ok,
-            LibraryRootRow.configured,
+            in_scope(),
             MediaItem.kind == "episode",
             MediaItem.show.is_not(None),
         )  # fmt: skip
@@ -254,7 +270,7 @@ def albums(s: Session, sort: str = "added", where=None) -> list[dict]:
         .where(
             MediaItem.available,
             MediaItem.probe_ok,
-            LibraryRootRow.configured,
+            in_scope(),
             MediaItem.kind == "track",
         )  # fmt: skip
         .group_by(artist, func.coalesce(MediaItem.album, ""))
@@ -305,7 +321,7 @@ def text_match(term: str, *cols):
 
 
 def counts(s: Session) -> dict[str, int]:
-    base = and_(MediaItem.available, MediaItem.probe_ok, LibraryRootRow.configured)
+    base = and_(MediaItem.available, MediaItem.probe_ok, in_scope())
 
     def n(*conds) -> int:
         q = select(func.count(MediaItem.id)).join(LibraryRootRow).where(base, *conds)
@@ -332,13 +348,13 @@ def counts(s: Session) -> dict[str, int]:
         "failed": s.scalar(
             select(func.count(MediaItem.id))
             .join(LibraryRootRow)
-            .where(MediaItem.probe_ok.is_(False), MediaItem.available, LibraryRootRow.configured)
+            .where(MediaItem.probe_ok.is_(False), MediaItem.available, in_scope())
         )
         or 0,  # fmt: skip
         "unavailable": s.scalar(
             select(func.count(MediaItem.id))
             .join(LibraryRootRow)
-            .where(MediaItem.available.is_(False), LibraryRootRow.configured)
+            .where(MediaItem.available.is_(False), in_scope())
         )
         or 0,  # fmt: skip
     }
@@ -395,7 +411,7 @@ def album_photos(s: Session, name: str) -> list[MediaItem]:
 # libraries are merged. Built from paths only, cached until the library changes.
 
 LOOSE = "Other tracks"
-_tree_cache: dict = {"stamp": None, "tree": None}
+_tree_cache: dict[bool, dict] = {}  # per scope (kids only or not): {"stamp", "tree"}
 
 
 def _music_tree(s: Session) -> dict:
@@ -403,8 +419,9 @@ def _music_tree(s: Session) -> dict:
     stamp = s.execute(
         q.with_only_columns(func.count(MediaItem.id), func.max(MediaItem.updated_at))
     ).one()
-    if _tree_cache["stamp"] == tuple(stamp):
-        return _tree_cache["tree"]
+    cache = _tree_cache.setdefault(SCOPE.get().kids_only, {"stamp": None, "tree": None})
+    if cache["stamp"] == tuple(stamp):
+        return cache["tree"]
     rows = s.execute(q.with_only_columns(MediaItem.id, MediaItem.rel_path, MediaItem.year,
                                          MediaItem.added_at, MediaItem.disc_no, MediaItem.track_no)
                      ).all()  # fmt: skip
@@ -425,7 +442,7 @@ def _music_tree(s: Session) -> dict:
             al["tracks"].sort()
             name, year = split_year(al["name"]) if al["name"] != LOOSE else (al["name"], None)
             al["title"], al["year"] = name or al["name"], year or al["year"]
-    _tree_cache.update(stamp=tuple(stamp), tree=artists)
+    cache.update(stamp=tuple(stamp), tree=artists)
     return artists
 
 

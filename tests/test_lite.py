@@ -195,3 +195,23 @@ def test_lite_css_avoids_newer_css():
     body = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
     for modern in ("display: grid", "display: flex", "var(--", "gap:", "object-fit", "clamp("):
         assert modern not in body, modern
+
+
+def test_lite_moves_https_visitors_to_plain_http(client):
+    """iOS's media player won't use an https stream whose certificate isn't
+    installed, even after Safari's "continue" for the page."""
+    r = client.get("https://192.168.1.2:9596/lite/item/5?t=0", follow_redirects=False)
+    assert (
+        r.status_code == 302 and r.headers["location"] == "http://192.168.1.2:9595/lite/item/5?t=0"
+    )
+    assert client.get("/lite/", follow_redirects=False).status_code == 200  # http: stays
+
+
+def test_player_reports_reach_the_log(client, caplog):
+    with caplog.at_level("INFO", logger="picturehouse.web.lite"):
+        r = client.get("/lite/report", params={"ev": "error", "err": "4", "ns": "3",
+                                                "p": "https:", "src": "/api/items/5/file"})  # fmt: skip
+    assert r.status_code == 204
+    rec = next(x for x in caplog.records if x.getMessage() == "Lite player: error")
+    assert rec.levelname == "WARNING" and rec.error_code == "4" and rec.protocol == "https:"
+    assert 'report("error")' in lite.PLAYER_JS and 'report("play")' in lite.PLAYER_JS

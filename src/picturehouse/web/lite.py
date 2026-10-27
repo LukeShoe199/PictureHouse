@@ -24,7 +24,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +56,15 @@ PLAYER_JS = """<script>
     x.send('{"position":' + Math.round(p) + ',"completed":' +
            (total && p > total * 0.92 ? "true" : "false") + "}");
   }
+  // Tell the server what the player did (its log is all we see of old devices).
+  function report(ev) {
+    var err = v.error ? v.error.code : "";
+    (new Image()).src = "/lite/report?ev=" + ev + "&err=" + err + "&ns=" + v.networkState +
+      "&p=" + encodeURIComponent(location.protocol) +
+      "&src=" + encodeURIComponent(v.currentSrc || v.src || "");
+  }
+  v.addEventListener("play", function () { report("play"); }, false);
+  v.addEventListener("error", function () { report("error"); }, false);
   v.addEventListener("loadedmetadata", seek, false);
   v.addEventListener("playing", seek, false);
   v.addEventListener("timeupdate", function () {
@@ -292,6 +301,16 @@ def router(svc, api) -> APIRouter:
                 f'alt="{e(p["title"])}"></a>')  # fmt: skip
         return render(p["title"] or d["title"], body, back=(d["title"], base))
 
+    @r.get("/report")
+    def report(request: Request, ev: str = "", err: str = "", ns: str = "", p: str = "",
+               src: str = ""):  # fmt: skip
+        """What a Lite player did (play pressed, or an error), sent by its script."""
+        level = logging.WARNING if ev == "error" else logging.INFO
+        log.log(level, "Lite player: %s", ev[:20], extra={
+            "error_code": err[:10], "network_state": ns[:10], "protocol": p[:10],
+            "src": src[:300], "ua": request.headers.get("user-agent", "")[:300]})  # fmt: skip
+        return Response(status_code=204)
+
     @r.get("/item/{item_id}")
     def item(request: Request, item_id: int, t: float | None = Query(None, ge=0),
              album: str | None = None, artist: str | None = None):  # fmt: skip
@@ -457,6 +476,16 @@ class LiteError(Exception):
 def install(app, svc, api) -> None:
     """Add Lite's pages, and its error page, to the app."""
     app.include_router(router(svc, api))
+
+    @app.middleware("http")
+    async def lite_over_http(request, call_next):
+        """Lite always runs over plain http: on an old device without the
+        certificate, Safari lets you past the warning for pages, but its media
+        player refuses the https stream (crossed-out play button)."""
+        if request.url.scheme == "https" and request.url.path.startswith("/lite"):
+            port = svc.settings.server.http_port
+            return RedirectResponse(str(request.url.replace(scheme="http", port=port)), 302)
+        return await call_next(request)
 
     @app.exception_handler(LiteError)
     async def lite_error(_request, ex: LiteError):

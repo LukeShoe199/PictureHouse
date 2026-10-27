@@ -56,6 +56,23 @@ fn save_prefs(app: &AppHandle, prefs: &Prefs) {
 }
 const TRAY: &str = "tray";
 
+/// Add folder -> Browse, inside the desktop app: the system's own folder
+/// picker (the console asks via window.__TAURI__; in a plain browser it uses
+/// its in-page folder browser instead). The server runs on this computer, so
+/// a path picked here is a path the server can read. None = cancelled.
+#[tauri::command]
+async fn pick_folder(app: AppHandle, start: Option<String>) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut dialog = app.dialog().file().set_title("Choose a folder for PictureHouse");
+    if let Some(dir) = start.filter(|d| std::path::Path::new(d).is_dir()) {
+        dialog = dialog.set_directory(dir);
+    }
+    if let Some(window) = app.get_webview_window(MAIN) {
+        dialog = dialog.set_parent(&window);
+    }
+    dialog.blocking_pick_folder().map(|p| p.to_string())
+}
+
 fn main() {
     let minimized = std::env::args().any(|a| a == "--minimized");
 
@@ -64,6 +81,8 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_window(app)))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![pick_folder])
         .setup(move |app| {
             let handle = app.handle().clone();
             KEEP_SERVING.store(load_prefs(&handle).keep_serving_in_tray, Ordering::Relaxed);

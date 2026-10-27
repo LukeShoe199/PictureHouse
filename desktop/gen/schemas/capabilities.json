@@ -1,1 +1,1 @@
-{}
+{"console":{"identifier":"console","description":"The PictureHouse console (served by this computer's own server) may ask the app for the native folder picker, nothing else.","remote":{"urls":["http://127.0.0.1:*","http://localhost:*"]},"local":true,"windows":["main"],"permissions":["allow-pick-folder"]}}

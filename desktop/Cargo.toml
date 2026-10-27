@@ -25,6 +25,10 @@ tauri-codegen = "=2.6.3"
 tauri-plugin-single-instance = "=2.4.5"
 tauri-plugin-autostart = "=2.5.1"
 tauri-plugin-opener = "=2.5.5"
+# The native "Select Folder" dialog (Add folder -> Browse in the desktop app).
+# 2.7.x: the last line that works with tauri 2.11 (2.8 needs 2.12); fs pinned to match.
+tauri-plugin-dialog = "=2.7.3"
+tauri-plugin-fs = "=2.5.2"
 reqwest = { version = "=0.13.5", default-features = false, features = ["blocking", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

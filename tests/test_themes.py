@@ -260,3 +260,16 @@ def test_transitions_respect_reduced_motion():
     assert "prefers-reduced-motion: reduce" in block and "::view-transition-group(*)" in block
     js = (REPO / "src/picturehouse/web/static/app.js").read_text(encoding="utf-8")
     assert "prefers-reduced-motion: reduce" in js.split("function animated", 1)[0][-800:]
+
+
+def test_dropdown_lists_are_readable_in_every_theme():
+    """A <select>'s open list is drawn by the system: with only a translucent
+    field background (glass themes) its light text landed on a white list."""
+    css = (REPO / "src/picturehouse/web/static/app.css").read_text(encoding="utf-8")
+    assert (
+        "select option, select optgroup { background-color: var(--bg); color: var(--fg); }" in css
+    )
+    for theme in ThemeStore(None).themes().values():
+        assert not theme.value("color.background").startswith("rgba"), (
+            f"{theme.id}: solid background needed"
+        )

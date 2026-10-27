@@ -2295,6 +2295,19 @@ async function browseTo(path) {
   const first = box.querySelector('.dir, [data-act="browse-use"], [data-act="browse-go"]');
   if (first) first.focus();
 }
+/* Inside the Windows/Linux desktop app the system's own folder picker is used:
+   the app exposes one command to this page (desktop/capabilities/console.json).
+   Its server runs on the same computer, so the picked path is one it can read. */
+const desktopApp = () => !!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke);
+async function nativePick() {
+  const f = $('#addform'); if (!f) return;
+  try {
+    const path = await window.__TAURI__.core.invoke('pick_folder', { start: f.elements.path.value.trim() || null });
+    if (path) { BR.path = path; useBrowsedFolder(); } else f.elements.path.focus();
+  } catch (e) {
+    browseTo('');  // the app refused (e.g. an older version): use the in-page browser
+  }
+}
 function closeBrowser() {
   const box = $('#browser'); if (box) { box.hidden = true; box.innerHTML = ''; }
   const b = $('[data-act="browse-open"]'); if (b) b.focus();
@@ -2355,7 +2368,7 @@ async function act(name, btn) {
     } catch (e) { btn.disabled = false; toast('Could not change the default theme: ' + e.message); }
     return;
   }
-  if (name === 'browse-open') { browseTo(''); return; }
+  if (name === 'browse-open') { if (desktopApp()) nativePick(); else browseTo(''); return; }
   if (name === 'browse-go') { browseTo(btn.dataset.path || ''); return; }
   if (name === 'browse-close') { closeBrowser(); return; }
   if (name === 'browse-use') { useBrowsedFolder(); return; }

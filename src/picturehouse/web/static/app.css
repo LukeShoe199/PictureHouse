@@ -358,6 +358,10 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--li
 .field input, .field select { height: 40px; min-width: 0; width: 100%; padding: 0 12px; background: var(--bg); color: var(--fg);
   border: 1px solid var(--line); border-radius: 8px; font: inherit; }
 .field input:focus, .field select:focus { border-color: var(--accent); outline: none; }
+/* The open list of a <select> is drawn by the system on its own background: give the
+   options solid theme colours, or light text can land on a white list (a translucent
+   field background, as glass themes use, doesn't carry over). */
+select option, select optgroup { background-color: var(--bg); color: var(--fg); }
 .formbtns { display: flex; gap: 8px; flex-wrap: wrap; }
 .formerr { margin: 10px 0 0; color: var(--bad); font-size: 13.5px; overflow-wrap: anywhere; }
 .addform { margin-bottom: 12px; }
@@ -583,7 +587,6 @@ body.phv-open { overflow: hidden; }
 .phv-btn .ico { width: 20px; height: 20px; }
 .phv-count { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; color: rgba(255,255,255,.8); }
 .phv-bar select { background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 6px; padding: 8px; }
-.phv-bar select option { color: #000; }
 .phv-check { display: flex; align-items: center; gap: 6px; font-size: 14px; color: rgba(255,255,255,.85); }
 .vz canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .vz-t { position: absolute; top: 24px; left: 28px; pointer-events: none; }

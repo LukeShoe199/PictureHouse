@@ -150,3 +150,28 @@ body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-event
   .ptop { top: calc(env(safe-area-inset-top, 0px) + 8px); padding-block: 4px; }
   .pctrl { bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); padding-block: 8px; }
 }
+
+/* ---- Transitions: pages, the poster morph, and overlays ---- */
+/* Going deeper, the old page sinks back as the new one rises in; coming back
+   (data-ph-dir="back"), the page you return to settles forward into place. */
+::view-transition-old(root) { animation: .3s var(--ease) both ist-page-out; }
+::view-transition-new(root) { animation: .52s var(--ease) both ist-page-in; }
+:root[data-ph-dir="back"]::view-transition-old(root) { animation-name: ist-page-out-back; }
+:root[data-ph-dir="back"]::view-transition-new(root) { animation-name: ist-page-in-back; }
+@keyframes ist-page-out { to { opacity: 0; transform: scale(.975); } }
+@keyframes ist-page-in { from { opacity: 0; transform: translateY(28px) scale(1.012); } }
+@keyframes ist-page-out-back { to { opacity: 0; transform: translateY(24px) scale(1.01); } }
+@keyframes ist-page-in-back { from { opacity: 0; transform: scale(.975); } }
+/* The poster you open glides and grows into the film's big poster (and back). */
+::view-transition-group(ph-art) { animation-duration: .62s; animation-timing-function: var(--spring); }
+::view-transition-group(ph-nav), ::view-transition-group(ph-top), ::view-transition-group(ph-mini) { animation-duration: .4s; }
+/* Overlays: the player fades up; dialogs, menus and messages pop in on a spring. */
+.player:not([hidden]) { animation: ist-fade .32s var(--ease); }
+.sheet .sheet-box { animation: ist-pop .5s var(--spring); }
+.devmenu:not([hidden]) { animation: ist-drop .38s var(--spring); transform-origin: top right; }
+.mini:not([hidden]) { animation: ist-pop .5s var(--spring); }
+.toast:not([hidden]) { animation: ist-toast .5s var(--spring); }
+@keyframes ist-fade { from { opacity: 0; } }
+@keyframes ist-pop { from { opacity: 0; transform: translateY(14px) scale(.94); } }
+@keyframes ist-drop { from { opacity: 0; transform: translateY(-10px) scale(.95); } }
+@keyframes ist-toast { from { opacity: 0; transform: translate(-50%, 16px) scale(.92); } }

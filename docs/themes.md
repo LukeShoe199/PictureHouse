@@ -152,6 +152,25 @@ Besides the token variables, theme.css can use:
 | `--ph-ambient` | The artwork on screen (the home banner, or the backdrop of a film, series or album page) as a CSS image, or `none`. For tinting the page with what's showing, as iStream does: `background: var(--ph-ambient, none) center / cover; filter: blur(80px);`. |
 | `--ph-main-top`, `--ph-hero-pull` | Set by the `"floating"` and `"full-bleed"` layouts: how far down the page content starts, and how far a full-bleed banner slides up under the controls. |
 
+### Transitions
+
+Where the browser supports it (Chrome and Edge 111+, the Windows and Android
+apps, Safari 18+), moving between pages animates using the
+[View Transitions API](https://developer.mozilla.org/docs/Web/API/View_Transition_API).
+Elsewhere pages simply switch. Themes shape the animation in theme.css:
+
+| Selector | What it animates | PictureHouse theme |
+|---|---|---|
+| `::view-transition-old(root)`, `::view-transition-new(root)` | The page leaving and the page arriving | A quick crossfade (0.18s) |
+| `::view-transition-group(ph-art)` | The artwork you opened morphing into the big poster on its page, and back again | A 0.36s glide |
+| `::view-transition-group(ph-nav)`, `(ph-top)`, `(ph-mini)` | The navigation, search row and music bar, which hold still | — |
+| `:root[data-ph-dir="forward"]`, `[data-ph-dir="back"]` | Which way you went: deeper (into a film, series, album, artist) or back out | — |
+
+Switching theme and changing the home banner's slide also crossfade. The
+system's "reduce motion" setting turns all of this off, whatever the theme
+says. iStream's theme.css has a full example (pages that sink back and rise
+in, a springy poster morph, overlays that pop in).
+
 ### theme.css
 
 Anything tokens can't express goes here: glass effects, typography details,

@@ -310,6 +310,19 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--li
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 
+/* ---------- Page transitions (View Transitions; themes restyle these) ---------- */
+/* Navigation, the search row and the music bar hold still while pages change. */
+.rail { view-transition-name: ph-nav; }
+.top { view-transition-name: ph-top; }
+.mini { view-transition-name: ph-mini; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .18s; }
+/* A poster opening into its film page (and back). */
+::view-transition-group(ph-art) { animation-duration: .36s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-old(ph-art), ::view-transition-new(ph-art) { height: 100%; object-fit: cover; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
 /* ---------- Additions for the live app (not in the mockup) ---------- */
 .led.bad { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
 .led.wait { background: var(--faint); box-shadow: none; }

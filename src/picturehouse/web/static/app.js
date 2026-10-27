@@ -784,7 +784,14 @@ const deviceTheme = () => { try { return localStorage.getItem('ph.theme'); } cat
 function applyTheme(id) {
   try { if (id) localStorage.setItem('ph.theme', id); else localStorage.removeItem('ph.theme'); } catch (e) { /* private mode */ }
   const link = $('#themecss');
-  if (link) link.href = id ? `/theme.css?id=${enc(id)}` : `/theme.css?d=${Date.now()}`;
+  if (!link) return;
+  const href = id ? `/theme.css?id=${enc(id)}` : `/theme.css?d=${Date.now()}`;
+  // Crossfade from the old theme to the new one once its stylesheet has loaded.
+  animated(() => new Promise(done => {
+    const t = setTimeout(done, 1500);
+    link.addEventListener('load', () => { clearTimeout(t); done(); }, { once: true });
+    link.href = href;
+  }));
 }
 function syncThemeColor() {
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
@@ -1219,6 +1226,43 @@ function parseRoute() {
   return { name, arg, q: new URLSearchParams(qs) };
 }
 const SECTION = { home: 'home', films: 'films', tv: 'tv', show: 'tv', music: 'music', album: 'music', 'home-videos': 'home-videos', library: 'library' };
+/* Smooth transitions (View Transitions API: Chrome/Edge 111+, the Windows and
+   Android apps, Safari 18+; elsewhere pages simply switch). The browser
+   snapshots the old page, the DOM changes, then it animates between them;
+   themes style ::view-transition-*(root) and ::view-transition-group(ph-art).
+   A poster you open morphs into the film's big poster (and back again):
+   both carry view-transition-name ph-art for that one transition.
+   :root[data-ph-dir] is "forward" (deeper: a film, series, album) or "back". */
+const DETAIL = /^#\/(item|show|album|falbum|artist)\//;
+const motionOK = () => !!document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+function animated(update) {
+  if (!motionOK()) { update(); return Promise.resolve(); }
+  return document.startViewTransition(update).updateCallbackDone.catch(() => {});
+}
+async function pageTransition(fromHash, toHash, swap) {
+  const morphFrom = S.morphFrom; S.morphFrom = null;
+  if (!motionOK()) { swap(); return; }
+  const deeper = DETAIL.test(toHash) && !DETAIL.test(fromHash);
+  const shallower = DETAIL.test(fromHash) && !DETAIL.test(toHash);
+  document.documentElement.dataset.phDir = shallower ? 'back' : 'forward';
+  const named = [];
+  const name = el => { if (el && named.length < 2) { el.style.viewTransitionName = 'ph-art'; named.push(el); } };
+  // Old page: the poster clicked in a list, or the big poster when leaving a film.
+  if (deeper && morphFrom && morphFrom.isConnected) name(morphFrom);
+  else if (shallower) name($('#view .d-poster'));
+  const t = document.startViewTransition(() => {
+    for (const el of named) el.style.viewTransitionName = '';
+    const had = named.length; named.length = 0;
+    swap();
+    if (!had) return;
+    // New page: its counterpart, so the browser morphs one into the other.
+    if (deeper) name($('#view .d-poster'));
+    else name($(`#view .card[data-href="${CSS.escape(fromHash)}"] .art`));
+  });
+  t.finished.finally(() => { for (const el of named) el.style.viewTransitionName = ''; });
+  await t.updateCallbackDone.catch(() => {});
+}
+
 async function route(o = {}) {
   const r = parseRoute();
   const prevName = S.route.name;
@@ -1237,13 +1281,21 @@ async function route(o = {}) {
   clearTimeout(slow);
   if (tok !== S.tok) return;
   document.title = (r.name === 'home' ? '' : (data && (data.title || (data.q != null && `Search: ${data.q}`)) || def.title) + ' · ') + 'PictureHouse';
-  if (err) { S.current = null; v.innerHTML = errorView(err); if (err.status === 0) refreshStatus(); }
-  else {
-    S.current = { def, data };
-    drawCurrent();
-    if (def.after) def.after(data);
-  }
-  if (!o.keepScroll) window.scrollTo(0, 0);
+  const swap = () => {
+    if (err) { S.current = null; v.innerHTML = errorView(err); if (err.status === 0) refreshStatus(); }
+    else {
+      S.current = { def, data };
+      drawCurrent();
+      if (def.after) def.after(data);
+    }
+    if (!o.keepScroll) window.scrollTo(0, 0);
+  };
+  const hash = location.hash || '#/';
+  const fromHash = S.shownHash;
+  S.shownHash = hash;
+  // A new page animates (a refresh of the same page doesn't): see pageTransition().
+  if (fromHash && fromHash !== hash) await pageTransition(fromHash, hash, swap);
+  else swap();
   if (o.focus) focusSel(o.focus);
   else if (focusedSel) focusSel(focusedSel);
   else if (o.focusFirst) { const f = v.querySelector('[data-nav]'); if (f) f.focus({ preventScroll: true }); }
@@ -2171,10 +2223,10 @@ document.addEventListener('click', e => {
   if ('devsel' in ds) { pickDevice(ds.devsel); return; }
   if (ds.href && t.closest('#devmenu')) toggleDevMenu(false);
   if (t.id === 'installbtn') { installApp(); return; }
-  if (ds.href) { nav(ds.href, { focusFirst: true }); return; }
+  if (ds.href) { S.morphFrom = t.matches('.card') ? t.querySelector('.art') : null; nav(ds.href, { focusFirst: true }); return; }
   if (ds.play) { openPlayer(ds.play, ds.from != null ? +ds.from : null); return; }
   if ('back' in ds) { back(); return; }
-  if (ds.feat) { S.feat = +ds.feat; redraw(`[data-feat="${S.feat}"]`); return; }
+  if (ds.feat) { S.feat = +ds.feat; animated(() => redraw(`[data-feat="${S.feat}"]`)); return; }
   if (ds.season != null && S.current) { S.season[S.current.data.key] = ds.season === 'null' ? null : +ds.season; redraw(`[data-season="${CSS.escape(ds.season)}"]`); return; }
   if (ds.sort) { const r = S.route; nav(`#/${r.name}?sort=${ds.sort}`, { replace: true, keepScroll: true, focus: `[data-sort="${ds.sort}"]` }); return; }
   if (ds.track) {

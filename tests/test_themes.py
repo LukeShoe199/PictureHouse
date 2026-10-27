@@ -251,3 +251,12 @@ def test_cli(tmp_path):
     bad = make_theme(tmp_path / "src2", "bad", tokens={"color.accent": "#fff;x"})
     r = cli("theme", "check", str(bad))
     assert r.exit_code != 0 and "isn't a valid color" in r.output
+
+
+def test_transitions_respect_reduced_motion():
+    """Page transitions are part of the engine; "reduce motion" must stop them."""
+    css = (REPO / "src/picturehouse/web/static/app.css").read_text(encoding="utf-8")
+    block = css.split("Page transitions", 1)[1]
+    assert "prefers-reduced-motion: reduce" in block and "::view-transition-group(*)" in block
+    js = (REPO / "src/picturehouse/web/static/app.js").read_text(encoding="utf-8")
+    assert "prefers-reduced-motion: reduce" in js.split("function animated", 1)[0][-800:]

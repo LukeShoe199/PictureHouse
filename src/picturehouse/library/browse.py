@@ -108,7 +108,14 @@ def roots() -> list[Place]:
     places: list[Place] = []
 
     def add(name: str, path: Path, kind: str) -> None:
-        if path.is_dir() and all(p.path != str(path) for p in places):
+        try:
+            # An unformatted or unreadable drive raises here instead of
+            # answering False (WinError 1005): leave it out, list the rest.
+            if not path.is_dir():
+                return
+        except OSError:
+            return
+        if all(p.path != str(path) for p in places):
             places.append(Place(name, str(path), kind))
 
     if in_container():

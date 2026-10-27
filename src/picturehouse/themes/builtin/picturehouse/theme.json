@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "id": "picturehouse",
+  "name": "PictureHouse",
+  "version": "1.0.0",
+  "author": "PictureHouse",
+  "description": "The original look: a dark cinema with projector-lamp amber, condensed poster titles and a side rail.",
+  "scheme": "dark"
+}

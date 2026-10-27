@@ -88,3 +88,22 @@ def test_api_is_admin_only(tree, media_library, tmp_path):
             assert bad.status_code == 400 and "doesn't exist" in bad.json()["detail"]
     finally:
         svc.close()
+
+
+def test_an_unreadable_drive_is_left_out_not_fatal(monkeypatch, tmp_path):
+    """Windows: an unformatted drive (or empty card reader) raises WinError 1005
+    from is_dir() instead of answering False; that broke the whole list."""
+    real_is_dir = browse.Path.is_dir
+
+    def is_dir(self, *a, **k):
+        if self == tmp_path / "broken":
+            raise OSError(1005, "The volume does not contain a recognized file system")
+        return real_is_dir(self, *a, **k)
+
+    monkeypatch.setattr(browse.Path, "is_dir", is_dir)
+    monkeypatch.setattr(browse, "in_container", lambda: False)  # CI may run in Docker
+    monkeypatch.setattr(
+        browse, "_home_shortcuts", lambda: [("Broken", tmp_path / "broken"), ("Fine", tmp_path)]
+    )
+    names = [p.name for p in browse.roots()]
+    assert "Fine" in names and "Broken" not in names

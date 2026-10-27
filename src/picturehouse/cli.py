@@ -46,6 +46,10 @@ config_app = typer.Typer(
 app.add_typer(config_app, name="config")
 library_app = typer.Typer(help="Add, remove and list library folders.", no_args_is_help=True)
 app.add_typer(library_app, name="library")
+theme_app = typer.Typer(
+    help="List, check and install themes (docs/themes.md).", no_args_is_help=True
+)
+app.add_typer(theme_app, name="theme")
 
 
 @dataclass(frozen=True)
@@ -251,6 +255,99 @@ def library_remove(ctx: typer.Context, name: str) -> None:
     st: AppState = ctx.obj
     remove_root(st.config_file, name)
     typer.echo(f"removed library {name!r}")
+
+
+@theme_app.command("list")
+@handles_errors
+def theme_list(ctx: typer.Context) -> None:
+    """Themes this server has; * marks the default."""
+    from picturehouse.themes import ThemeStore
+
+    st: AppState = ctx.obj
+    store = ThemeStore(st.layout.themes_dir)
+    default = store.get(st.load().ui.theme).id
+    for t in sorted(store.themes().values(), key=lambda t: t.id):
+        where = "built-in" if t.builtin else "installed"
+        mark = "*" if t.id == default else " "
+        typer.echo(f"{mark} {t.id:<20} {t.name:<20} {t.version:<8} {where:<9} {t.author}")
+    for p in store.problems:
+        typer.echo(f"  can't use {p['folder']}: {p['error']}", err=True)
+
+
+@theme_app.command("check")
+@handles_errors
+def theme_check(path: Annotated[Path, typer.Argument(help="A theme folder")]) -> None:
+    """Check a theme folder without installing it (what's wrong, if anything)."""
+    from picturehouse.themes import load_theme, render_css
+
+    theme = load_theme(path.resolve())
+    css = render_css(theme)
+    typer.echo(f"ok: {theme.name} ({theme.id}) {theme.version}: {len(theme.tokens)} tokens, "
+               f"layout {theme.layout}, {'own stylesheet' if theme.stylesheet else 'no stylesheet'}, "
+               f"{len(theme.assets)} asset file(s); {len(css)} bytes of CSS")  # fmt: skip
+
+
+@theme_app.command("install")
+@handles_errors
+def theme_install(
+    ctx: typer.Context,
+    path: Annotated[Path, typer.Argument(help="A theme folder")],
+    replace: Annotated[bool, typer.Option("--replace", help="Update an installed theme")] = False,
+) -> None:
+    """Check a theme folder and copy it into the data directory."""
+    from picturehouse.themes import install_theme
+
+    st: AppState = ctx.obj
+    theme = install_theme(path.resolve(), st.layout.themes_dir, replace=replace)
+    typer.echo(f"installed {theme.name} ({theme.id}); choose it in the console (Library -> Appearance) "
+               f"or make it the default: picturehouse theme default {theme.id}")  # fmt: skip
+
+
+@theme_app.command("remove")
+@handles_errors
+def theme_remove(
+    ctx: typer.Context, theme_id: Annotated[str, typer.Argument(help="Theme id")]
+) -> None:
+    """Remove an installed theme (built-in ones can't be removed)."""
+    import shutil
+
+    from picturehouse.library.roots import set_config_values
+    from picturehouse.themes import DEFAULT_THEME, ThemeStore
+
+    st: AppState = ctx.obj
+    theme = ThemeStore(st.layout.themes_dir).themes().get(theme_id)
+    if theme is None or theme.builtin:
+        raise PictureHouseError(f"no installed theme called {theme_id!r}",
+                                hint="see `picturehouse theme list`")  # fmt: skip
+    shutil.rmtree(theme.folder)
+    if st.load().ui.theme == theme_id:
+        set_config_values(st.config_file, "ui", {"theme": DEFAULT_THEME})
+        typer.echo(f"it was the default; the default is now {DEFAULT_THEME}")
+    typer.echo(f"removed {theme_id}")
+
+
+@theme_app.command("default")
+@handles_errors
+def theme_default(
+    ctx: typer.Context, theme_id: Annotated[str | None, typer.Argument(help="Theme id")] = None
+) -> None:
+    """Show the theme every device starts with, or set it."""
+    from picturehouse.library.roots import set_config_values
+    from picturehouse.themes import ThemeStore
+
+    st: AppState = ctx.obj
+    store = ThemeStore(st.layout.themes_dir)
+    if theme_id is None:
+        typer.echo(store.get(st.load().ui.theme).id)
+        return
+    if theme_id not in store.themes():
+        raise PictureHouseError(
+            f"no theme called {theme_id!r}", hint="see `picturehouse theme list`"
+        )
+    set_config_values(st.config_file, "ui", {"theme": theme_id})
+    typer.echo(
+        f"default theme is now {theme_id} (a running server uses it after a restart; the console can change it live: Library -> Appearance)"
+    )
 
 
 @library_app.command("browse")

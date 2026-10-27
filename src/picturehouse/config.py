@@ -76,6 +76,11 @@ class ScanConfig(_Section):
     audio_check: bool = True  # flag films/episodes whose audio looks broken
 
 
+class UIConfig(_Section):
+    # Theme every device uses unless it picks its own (themes/, docs/themes.md).
+    theme: str = Field("picturehouse", pattern=r"^[a-z0-9][a-z0-9-]{1,39}$")
+
+
 class LoggingConfig(_Section):
     level: LogLevel = "INFO"
     console_level: LogLevel = "INFO"
@@ -114,6 +119,7 @@ class Settings(_Section):
     dlna: DLNAConfig = DLNAConfig()
     metadata: MetadataConfig = MetadataConfig()
     scan: ScanConfig = ScanConfig()
+    ui: UIConfig = UIConfig()
     libraries: list[LibraryRoot] = []
 
     @field_validator("libraries")

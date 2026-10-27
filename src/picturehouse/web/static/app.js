@@ -673,13 +673,13 @@ VIEWS.library = {
   title: 'Library',
   async load() {
     const soft = p => api(p).catch(e => ({ _err: e.message }));
-    const [status, libs, problems, devices, scan, unmatched, admin] = await Promise.all([
+    const [status, libs, problems, devices, scan, unmatched, admin, themes] = await Promise.all([
       api('/api/status'), api('/api/libraries'), api('/api/problems'), soft('/api/devices'), api('/api/scan'),
-      soft('/api/unmatched'), soft('/api/admin')]);
+      soft('/api/unmatched'), soft('/api/admin'), soft('/api/themes')]);
     // Settings are admin-only; other devices see a note instead of an error.
     const [msettings, ssettings] = admin.admin ? await Promise.all([soft('/api/settings/metadata'), soft('/api/settings/streaming')]) : [null, null];
     S.status = status; S.admin = admin;
-    return { status, libs: libs.libraries || [], problems, devices: devices.devices || null, scan, unmatched, msettings, ssettings, admin };
+    return { status, libs: libs.libraries || [], problems, devices: devices.devices || null, scan, unmatched, msettings, ssettings, admin, themes };
   },
   after(d) {
     if (d.scan && d.scan.running) pollScan();
@@ -755,6 +755,7 @@ VIEWS.library = {
       </div>
       <section class="sec"><div class="sec-head"><h2>Online metadata</h2></div>${d.admin.admin ? metaPanelHTML(d.msettings, mst)
         : `<div class="panel"><p class="note">${esc(metaStatus(mst).pill)}. Keys and matching settings can be changed on the PC running PictureHouse${d.admin.pin_set ? ', or here after entering the admin PIN above' : ''}.</p></div>`}</section>
+      <section class="sec" id="appearance-sec"><div class="sec-head"><h2>Appearance</h2></div>${appearanceHTML(d.themes, d.admin.admin)}</section>
       <section class="sec"><div class="sec-head"><h2>DLNA</h2></div>
         <div class="panel">${dlna.enabled
           ? `${(dlna.addresses || []).length ? `<ul class="addrs">${dlna.addresses.map(a => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}<p class="note">TVs and apps such as VLC find this server automatically as “${esc(name)}”.</p>`
@@ -767,6 +768,46 @@ VIEWS.library = {
           : '<div class="panel"><p class="note">No devices seen yet. Browsers and TVs appear here once they connect.</p></div>'}</section></div>`;
   }
 };
+
+/* Themes (docs/themes.md): each device can pick its own; the admin sets everyone's default.
+   The choice is the #themecss <link> (index.html), so switching needs no reload. */
+const deviceTheme = () => { try { return localStorage.getItem('ph.theme'); } catch (e) { return null; } };
+function applyTheme(id) {
+  try { if (id) localStorage.setItem('ph.theme', id); else localStorage.removeItem('ph.theme'); } catch (e) { /* private mode */ }
+  const link = $('#themecss');
+  if (link) link.href = id ? `/theme.css?id=${enc(id)}` : `/theme.css?d=${Date.now()}`;
+}
+function syncThemeColor() {
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (bg && meta) meta.content = bg;
+}
+{ const link = $('#themecss'); if (link) link.addEventListener('load', syncThemeColor); syncThemeColor(); }
+function appearanceHTML(t, admin) {
+  if (!t || t._err) return `<div class="panel"><p class="note">Themes couldn't be loaded${t && t._err ? `: ${esc(t._err)}` : ''}.</p></div>`;
+  const mine = deviceTheme() && t.themes.some(x => x.id === deviceTheme()) ? deviceTheme() : null;
+  const active = mine || t.default;
+  const cards = t.themes.map(th => {
+    const sw = th.swatches;
+    const meta = [th.author && `by ${th.author}`, th.version && `v${th.version}`, th.id === t.default && 'default for all devices'].filter(Boolean).join(' · ');
+    return `<div class="theme${th.id === active ? ' on' : ''}">
+      <div class="tswatch" style="background:${esc(sw.background)}" aria-hidden="true">
+        <i style="background:${esc(sw.surface)}"></i><i style="background:${esc(sw.accent)}"></i><i style="background:${esc(sw.text)}"></i>
+        <span style="color:${esc(sw.text)}">Aa</span></div>
+      <div class="tinfo"><b>${esc(th.name)}</b>${th.description ? `<span>${esc(th.description)}</span>` : ''}<small>${esc(meta)}</small></div>
+      <div class="formbtns">
+        ${th.id === active ? '<span class="pill">In use on this device</span>'
+          : `<button class="btn small" data-nav data-act="theme-use" data-theme="${esc(th.id)}">Use on this device</button>`}
+        ${admin && th.id !== t.default ? `<button class="btn small" data-nav data-act="theme-default" data-theme="${esc(th.id)}">Make default for all devices</button>` : ''}
+      </div></div>`;
+  }).join('');
+  const follow = mine
+    ? `This device uses its own theme. <button class="linkbtn" data-nav data-act="theme-follow">Use the default instead</button>`
+    : 'This device uses the default theme, so it changes when the default does.';
+  const problems = admin && t.problems && t.problems.length
+    ? `<div class="panel" style="margin-top:12px"><h3>Themes that can't be used</h3>${t.problems.map(p => `<div class="issue"><code>${esc(p.folder)}</code><p>${esc(p.error)}</p></div>`).join('')}</div>` : '';
+  return `<div class="themes">${cards}</div><p class="note" style="margin-top:10px">${follow} Make your own theme: see docs/themes.md in the PictureHouse source.</p>${problems}`;
+}
 
 /* Streaming limits: a bitrate cap for TVs on Wi-Fi, and how many videos may be converted at once. */
 function streamingHTML(s, status) {
@@ -2240,6 +2281,18 @@ async function act(name, btn) {
     return;
   }
   if (name === 'add') { L.adding = true; L.justAdded = null; redraw('#addform input[name=name]'); return; }
+  if (name === 'theme-use') { applyTheme(btn.dataset.theme); redraw('#appearance-sec .theme.on'); return; }
+  if (name === 'theme-follow') { applyTheme(null); redraw('#appearance-sec .theme.on'); return; }
+  if (name === 'theme-default') {
+    btn.disabled = true;
+    try {
+      await api('/api/settings/theme', { method: 'PUT', body: { default: btn.dataset.theme } });
+      if (!deviceTheme()) applyTheme(null);  // this device follows the default: show it now
+      toast('Default theme changed for all devices');
+      await route({ keepScroll: true, focus: '#appearance-sec .theme.on' });
+    } catch (e) { btn.disabled = false; toast('Could not change the default theme: ' + e.message); }
+    return;
+  }
   if (name === 'browse-open') { browseTo(''); return; }
   if (name === 'browse-go') { browseTo(btn.dataset.path || ''); return; }
   if (name === 'browse-close') { closeBrowser(); return; }

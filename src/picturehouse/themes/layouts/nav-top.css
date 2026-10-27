@@ -1,0 +1,14 @@
+/* Layout option "nav": "top" — the side rail becomes a bar across the top,
+   tabs centred. Phones keep their bottom tab bar (see app.css). The bar's
+   height is the size.navigation token. */
+@media (min-width: 761px) {
+  .rail { top: 0; right: 0; bottom: auto; left: 0; width: auto; height: calc(var(--rail) + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) var(--gut) 0; flex-direction: row; justify-content: center; align-items: center; gap: 4px;
+    border-right: 0; border-bottom: 1px solid var(--line); }
+  .rail .logo { position: absolute; left: var(--gut); top: calc(50% + env(safe-area-inset-top, 0px) / 2); transform: translateY(-50%);
+    margin: 0; width: 36px; height: 36px; font-size: 14px; }
+  .rail .spacer { display: none; }
+  .navbtn { width: auto; flex-direction: row; gap: 8px; padding: 8px 16px; border-radius: 999px; font-size: 14px; letter-spacing: 0; }
+  .navbtn .ico { width: 18px; height: 18px; }
+  .main { margin-left: 0; padding-top: calc(var(--rail) + env(safe-area-inset-top, 0px) + 14px); }
+}

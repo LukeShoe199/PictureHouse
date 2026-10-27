@@ -1,0 +1,65 @@
+/* iStream: an Apple TV-inspired look for PictureHouse.
+   Tokens (theme.json) set the colours, fonts and rounding; this file adds what
+   tokens can't say: glass, type style and the tvOS "lift" on focus. */
+
+body { background: radial-gradient(1200px 700px at 50% -20%, #1d1d23 0%, #000 62%) fixed, #000; }
+
+/* ---- Top bar: frosted glass, pill tabs ---- */
+.rail { background: color-mix(in srgb, var(--bg-rail) 70%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); }
+.navbtn { color: var(--muted); font-weight: 600; transition: background .2s, color .2s; }
+.navbtn:hover { color: var(--fg); background: rgba(255, 255, 255, .08); }
+.navbtn.on .ico { color: inherit; }
+@media (min-width: 761px) {
+  .navbtn.on { color: #000; background: var(--fg); }
+}
+.logo { background: var(--fg); color: #000; font: 800 15px/1 var(--display); font-stretch: normal; letter-spacing: -.03em; }
+
+/* ---- Type: the system font, sentence case, tight and bold ---- */
+.hero-title, .page-head h1, .d-title, .sec-head h2, .poster .ptitle, .ptop .pt b,
+.sheet-head h2, .pcast b, .stat b, .ep .n {
+  font-stretch: normal; text-transform: none; letter-spacing: -.022em; }
+.hero-title { font-weight: 700; font-size: clamp(40px, 5.6vw, 76px); line-height: 1.02; }
+.page-head h1 { font-weight: 700; font-size: clamp(32px, 4vw, 48px); line-height: 1.05; }
+.d-title { font-weight: 700; font-size: clamp(34px, 4.6vw, 60px); line-height: 1.04; }
+.sec-head h2 { font-weight: 700; font-size: 22px; }
+.poster .ptitle { font-weight: 700; font-size: clamp(14px, 1.3vw, 17px); line-height: 1.12; }
+.ptop .pt b, .sheet-head h2 { font-weight: 700; }
+.stat b { font-weight: 700; }
+.eyebrow { color: var(--muted); letter-spacing: .08em; }
+.hero-syn, .d-syn { color: rgba(235, 235, 245, .8); }
+
+/* ---- Artwork: rounded, and lifts towards you when chosen (tvOS) ---- */
+.card .art { box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+  transition: transform .28s cubic-bezier(.2, .8, .2, 1), box-shadow .28s ease; }
+.card:hover .art, .card:focus-visible .art { transform: scale(1.06); box-shadow: 0 24px 48px rgba(0, 0, 0, .7); outline: none; }
+.card:focus-visible .cap b { color: var(--fg); }
+.playhint span { background: rgba(255, 255, 255, .95); color: #000; }
+.phthumb { border-radius: 8px; }
+.ep .thumb { border-radius: 10px; }
+
+/* ---- Hero ---- */
+.hero { box-shadow: 0 30px 70px rgba(0, 0, 0, .55); }
+
+/* ---- Buttons and chips: white primary, frosted secondary ---- */
+.btn { border: 0; background: rgba(255, 255, 255, .14); font-weight: 600;
+  -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); }
+.btn:hover { background: rgba(255, 255, 255, .22); }
+.btn.primary, .btn.primary:hover { color: #000; background: var(--fg); }
+.chip { border-color: transparent; background: rgba(255, 255, 255, .08); color: var(--fg); }
+.chip.on { background: var(--fg); color: #000; }
+
+/* ---- Panels, menus and dialogs: glass ---- */
+.panel, .stat { background: rgba(255, 255, 255, .05); border-color: rgba(255, 255, 255, .07); }
+.devmenu, .mini, .sheet-box { background: rgba(36, 36, 40, .82); border-color: rgba(255, 255, 255, .1);
+  -webkit-backdrop-filter: blur(30px) saturate(170%); backdrop-filter: blur(30px) saturate(170%); }
+.search, .devbtn { background: rgba(255, 255, 255, .08); border-color: transparent; }
+.field input, .field select, .field textarea { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .1); }
+
+/* ---- Focus: a soft white ring instead of an outline ---- */
+:focus-visible { outline-color: rgba(255, 255, 255, .9); }
+.btn:focus-visible, .chip:focus-visible, .navbtn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255, 255, 255, .85); }
+
+/* ---- Player ---- */
+.scrub input { accent-color: #fff; }
+.pbtn.big { background: #fff; color: #000; }

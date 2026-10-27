@@ -107,6 +107,11 @@ class DataLayout:
         return self.cache_dir / "transcode"
 
     @property
+    def themes_dir(self) -> Path:
+        """Installed themes (``picturehouse theme install``); built-in ones ship with the code."""
+        return self.root / "themes"
+
+    @property
     def log_dir(self) -> Path:
         return self.root / "logs"
 

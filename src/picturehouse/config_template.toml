@@ -59,6 +59,10 @@ interval_minutes = 360   # incremental rescan every N minutes while running; 0 =
 watch = true             # notice new/changed files within seconds (rescan is the backstop)
 audio_check = true       # flag films/episodes whose sound looks broken (e.g. missing dialogue)
 
+[ui]
+theme = "picturehouse"   # the look every device starts with (each device can pick its own);
+                         # list with `picturehouse theme list`
+
 [logging]
 level = "INFO"          # level written to the log file
 console_level = "INFO"  # level printed to the console

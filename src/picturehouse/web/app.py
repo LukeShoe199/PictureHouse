@@ -53,6 +53,8 @@ from picturehouse.streaming.artwork import find_artwork
 from picturehouse.streaming.decide import decide_browser, decide_dlna, mime_of
 from picturehouse.streaming.hls import HlsError, HlsManager
 from picturehouse.streaming.hls import playlist as hls_playlist_text
+from picturehouse.themes import ThemeStore, render_css
+from picturehouse.themes.engine import ASSET_TYPES as THEME_ASSET_TYPES
 from picturehouse.tls import ca_fingerprint
 from picturehouse.web import access
 from picturehouse.web import queries as Q
@@ -115,6 +117,10 @@ def remote_art(s, item: MediaItem) -> dict[str, str | None]:
         return {"poster": meta.poster_url if meta else None,
                 "backdrop": meta.backdrop_url if meta else None, "thumb": item.poster_url}  # fmt: skip
     return {"poster": item.poster_url, "backdrop": item.backdrop_url, "thumb": None}
+
+
+class ThemeSetting(BaseModel):
+    default: str = Field(..., pattern=r"^[a-z0-9][a-z0-9-]{1,39}$")
 
 
 class StreamingSettings(BaseModel):
@@ -224,6 +230,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     tracker = DeviceTracker(svc)
     hls_mgr = HlsManager(svc.ffmpeg.path, svc.layout.transcode_dir / "hls")
     procs.slots.limit = svc.settings.ffmpeg.max_transcodes
+    themes = ThemeStore(svc.layout.themes_dir)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -1114,6 +1121,29 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             svc.metadata_changed()  # write copies for everything matched so far
         return get_metadata_settings()
 
+    # ------------------------------------------------------------ themes
+
+    @api.get("/themes")
+    def list_themes():
+        """Themes this server has, and which one devices use by default."""
+        found = themes.themes()
+        default = themes.get(svc.settings.ui.theme).id
+        return {"default": default,
+                "themes": [t.summary() for t in sorted(found.values(), key=lambda t: (t.id != default, t.name.casefold()))],
+                "problems": themes.problems}  # fmt: skip
+
+    @api.put("/settings/theme")
+    def put_theme(body: ThemeSetting):
+        if body.default not in themes.themes():
+            raise HTTPException(404, f"no theme called {body.default!r}")
+        try:
+            set_config_values(svc.config_file, "ui", {"theme": body.default})
+            svc.reload_settings()
+        except PictureHouseError as e:
+            raise HTTPException(400, e.message) from e
+        log.info("default theme changed", extra={"theme": body.default})
+        return list_themes()
+
     @api.get("/settings/streaming")
     def get_streaming_settings():
         st = svc.settings
@@ -1347,6 +1377,28 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             raise HTTPException(404)
         return FileResponse(sw, media_type="text/javascript",
                             headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})  # fmt: skip
+
+    @app.get("/theme.css", include_in_schema=False)
+    def theme_css(id: str | None = None, target: str = "console"):
+        """The chosen theme as one stylesheet, applied on top of app.css (or tv.css).
+        Without ?id= it's the server's default theme. An unknown id falls back
+        to the default, so a device whose theme was removed still works."""
+        theme = themes.get(id or svc.settings.ui.theme)
+        css = render_css(theme, "tv" if target == "tv" else "console")
+        return Response(css, media_type="text/css; charset=utf-8",
+                        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})  # fmt: skip
+
+    @app.get("/themes/{theme_id}/{asset:path}", include_in_schema=False)
+    def theme_asset(theme_id: str, asset: str):
+        """A theme's own images and fonts (only those types, only inside its folder)."""
+        theme = themes.themes().get(theme_id)
+        rel = asset.replace("\\", "/")
+        if theme is None or rel not in theme.assets:
+            raise HTTPException(404)
+        path = theme.folder / rel
+        kind = THEME_ASSET_TYPES[path.suffix.lower()]
+        return FileResponse(path, media_type=kind,
+                            headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})  # fmt: skip
 
     @app.get("/tv", include_in_schema=False)
     @app.get("/tv/", include_in_schema=False)

@@ -68,18 +68,83 @@ def test_music_artist_album_track(client):
     assert "Next track: Second Song" in track and "&lsaquo; First Album" in track
 
 
+IPAD = {"user-agent": "Mozilla/5.0 (iPad; CPU OS 9_3_6 like Mac OS X) AppleWebKit/601.1.46 "
+                      "(KHTML, like Gecko) Version/9.0 Mobile/13G37 Safari/601.1"}  # fmt: skip
+OLD_ANDROID = {"user-agent": "Mozilla/5.0 (Linux; U; Android 4.1; en-gb) AppleWebKit/534.30 "
+                             "(KHTML, like Gecko) Version/4.0 Mobile Safari/534.30"}  # fmt: skip
+
+
+def player_src(html: str) -> str:
+    """The one place the page's player loads from (no <source> list)."""
+    assert "<source" not in html
+    return re.search(r'<(?:video|audio) id="pv" controls preload="none" src="([^"]+)"', html)[1]
+
+
 def test_direct_files_play_as_they_are(client):
-    page = client.get(f"/lite/item/{film(client, 'Amélie')['id']}").text
-    assert re.search(r'<source src="/api/items/\d+/file" type="video/', page)
-    assert "hls.m3u8" not in page and "stream.mp4" not in page
+    fid = film(client, "Amélie")["id"]
+    for ua in (IPAD, OLD_ANDROID):
+        page = client.get(f"/lite/item/{fid}", headers=ua).text
+        assert player_src(page) == f"/api/items/{fid}/file"
+        assert f'<a class="btn" href="/api/items/{fid}/file">Play full screen</a>' in page
 
 
-def test_conversions_offer_hls_then_a_progressive_stream(client):
+def test_conversions_go_as_hls_to_apple_devices(client):
+    """iOS won't play a live progressive stream (no byte ranges): HLS it is."""
     fid = film(client, "Odd Codecs")["id"]
-    page = client.get(f"/lite/item/{fid}").text
-    hls = page.index(f'src="/api/items/{fid}/hls.m3u8" type="application/vnd.apple.mpegurl"')
-    mp4 = page.index(f'src="/api/items/{fid}/stream.mp4?start=0" type="video/mp4"')
-    assert hls < mp4  # iOS takes the first it can play: HLS (seekable)
+    assert player_src(client.get(f"/lite/item/{fid}", headers=IPAD).text) == (
+        f"/api/items/{fid}/hls.m3u8"
+    )
+    assert player_src(client.get(f"/lite/item/{fid}", headers=OLD_ANDROID).text) == (
+        f"/api/items/{fid}/stream.mp4?start=0"
+    )
+
+
+def _it(file, vcodec="h264", acodec="aac", height=1080):
+    return {"id": 5, "file": file, "duration": 60.0, "video": {"codec": vcodec, "height": height},
+            "streams": [{"type": "audio", "codec": acodec}]}  # fmt: skip
+
+
+DIRECT_V = {"mode": "direct", "url": "/api/items/5/file", "mime": "video/x-matroska"}
+DIRECT_A = {"mode": "direct", "url": "/api/items/5/file", "mime": "audio/flac"}
+
+
+@pytest.mark.parametrize(
+    ("item", "decision", "is_apple", "route"),
+    [
+        # Chrome plays MKV and FLAC as they are; Safari on iOS doesn't.
+        (_it("a.mkv"), DIRECT_V, False, "original file"),
+        (_it("a.mkv"), DIRECT_V, True, "HLS"),
+        (_it("a.mp4"), {**DIRECT_V, "mime": "video/mp4"}, True, "original file"),
+        (_it("a.mp4", height=2160), {**DIRECT_V, "mime": "video/mp4"}, True, "HLS"),  # 4K
+        (_it("a.mp4", acodec="opus"), {**DIRECT_V, "mime": "video/mp4"}, True, "HLS"),
+        (_it("a.flac", None, "flac"), DIRECT_A, False, "original file"),
+        (_it("a.flac", None, "flac"), DIRECT_A, True, "MP3 stream"),
+        (_it("a.mp3", None, "mp3"), {**DIRECT_A, "mime": "audio/mpeg"}, True, "original file"),
+        (
+            _it("a.wma", None, "wmav2"),
+            {"mode": "transcode", "url": "x", "mime": "audio/mp4"},
+            False,
+            "MP3 stream",
+        ),  # fmt: skip
+    ],
+)
+def test_each_device_gets_a_stream_it_can_play(item, decision, is_apple, route):
+    assert lite.choose(item, decision, 0, is_apple).route == route
+
+
+def test_apple_detection():
+    assert lite.apple(IPAD["user-agent"])
+    assert not lite.apple(OLD_ANDROID["user-agent"])
+    assert not lite.apple("Mozilla/5.0 (iPad; CPU OS 17_0) AppleWebKit Chrome/120 Safari")
+
+
+def test_mp3_stream_for_any_audio(client):
+    track = client.get("/api/music/songs").json()["items"][0]
+    r = client.get(f"/api/items/{track['id']}/stream.mp3")
+    assert r.status_code == 200 and r.headers["content-type"] == "audio/mpeg"
+    assert r.content[:3] == b"ID3" or r.content[0] == 0xFF  # an MP3, frame sync
+    film_id = film(client, "Amélie")["id"]
+    assert client.get(f"/api/items/{film_id}/stream.mp3").status_code == 400
 
 
 def test_resumes_where_you_left_off(client):

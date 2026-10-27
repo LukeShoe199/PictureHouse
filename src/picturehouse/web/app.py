@@ -280,7 +280,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     async def media_cors(request: Request, call_next):
         response = await call_next(request)
         path = request.url.path
-        if path.startswith("/api/hls/") or path.endswith(("/file", "/hls.m3u8", "/stream.mp4")):
+        if path.startswith("/api/hls/") or path.endswith(("/file", "/hls.m3u8", "/stream.mp4",
+                                                          "/stream.mp3")):  # fmt: skip
             response.headers["Access-Control-Allow-Origin"] = "*"
             response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Range"
         return response
@@ -288,8 +289,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     @app.middleware("http")
     async def track_clients(request: Request, call_next):
         path = request.url.path
-        if request.client and (path.startswith(("/dlna/", "/lite/item/"))
-                               or path.endswith(("/file", "/play"))):  # fmt: skip
+        if request.client and (path.startswith(("/dlna/", "/lite/item/")) or path.endswith(
+                ("/file", "/play", "/hls.m3u8", "/stream.mp4", "/stream.mp3"))):  # fmt: skip
             via = "dlna" if path.startswith("/dlna/") else "web"
             await anyio.to_thread.run_sync(
                 tracker.seen, request.client.host, request.headers.get("user-agent", ""), via
@@ -695,6 +696,23 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
         return StreamingResponse(procs.stream_with_lease(cmd, label=label, lease=lease),
                                  media_type="audio/mp4" if audio_only else "video/mp4",
                                  headers={"Cache-Control": "no-store"})  # fmt: skip
+
+    @api.get("/items/{item_id}/stream.mp3")
+    def item_stream_mp3(item_id: int, start: float = Query(0.0, ge=0)):
+        """Any audio as a plain MP3 stream (restart at ?start=N to seek). For
+        players that can't take the fragmented MP4 stream: Safari on old iOS
+        only plays progressive video it can range-request, but plays an MP3
+        stream like internet radio (PictureHouse Lite uses this)."""
+        with svc.db.session() as s:
+            i = get_item(s, item_id)
+            if i.media_type != "audio":
+                raise HTTPException(400, "MP3 streams are for audio files")
+            path = item_path(i)
+        if not path.is_file():
+            raise HTTPException(404, "file is not reachable")
+        cmd = procs.mp3_cmd(svc.ffmpeg.path, path, start=start)
+        return StreamingResponse(procs.stream_with_lease(cmd, label=f"web:{item_id}:mp3", lease=None),
+                                 media_type="audio/mpeg", headers={"Cache-Control": "no-store"})  # fmt: skip
 
     @api.put("/items/{item_id}/progress", status_code=204)
     def put_progress(item_id: int, body: Progress):

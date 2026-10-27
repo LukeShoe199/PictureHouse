@@ -15,12 +15,18 @@ device may already make (web/access.py OPEN_WRITES).
 
 from __future__ import annotations
 
+import logging
+import re
+from dataclasses import dataclass
 from html import escape
+from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
+
+log = logging.getLogger(__name__)
 
 PAGE = 60  # items per page: old devices are slow and there's no lazy loading
 
@@ -35,7 +41,7 @@ PLAYER_JS = """<script>
   if (!v || !v.addEventListener) return;
   var id = v.getAttribute("data-id"), t = +v.getAttribute("data-t") || 0,
       total = +v.getAttribute("data-total") || 0, last = 0, seeked = t <= 0;
-  function progressive() { return /stream\\.mp4/.test(v.currentSrc || v.src || ""); }
+  function progressive() { return /stream\\.mp[34]/.test(v.currentSrc || v.src || ""); }
   function pos() { return (progressive() ? t : 0) + (v.currentTime || 0); }
   function seek() {
     if (seeked || progressive()) { seeked = true; return; }
@@ -287,8 +293,8 @@ def router(svc, api) -> APIRouter:
         return render(p["title"] or d["title"], body, back=(d["title"], base))
 
     @r.get("/item/{item_id}")
-    def item(item_id: int, t: float | None = Query(None, ge=0), album: str | None = None,
-             artist: str | None = None):  # fmt: skip
+    def item(request: Request, item_id: int, t: float | None = Query(None, ge=0),
+             album: str | None = None, artist: str | None = None):  # fmt: skip
         """``album`` / ``artist``: the music folder a track was opened from,
         for its Next track link and the way back (tags can differ from folders)."""
         it = call(api.item_detail, item_id)
@@ -300,7 +306,10 @@ def router(svc, api) -> APIRouter:
             start = 0.0
         body = f"<h1>{e(it['title'])}</h1>{meta_line(it)}"
         try:
-            body += player(it, call(api.play, item_id, start, "browser"), start)
+            ua = request.headers.get("user-agent", "")
+            src = choose(it, call(api.play, item_id, start, "browser"), start, apple(ua))
+            log.info("Lite play: %s", src.route, extra={"item": item_id, "ua": ua})
+            body += player(it, src, start)
         except LiteError as ex:
             body += f'<p class="msg">{e(ex.detail)}</p>'
         if start > 0:
@@ -311,24 +320,18 @@ def router(svc, api) -> APIRouter:
         body += neighbours(it, album, artist, ctx)
         return render(it["title"], body, back=back_for(it, album, artist))
 
-    def player(it: dict, d: dict, start: float) -> str:
-        audio = d["mime"].startswith("audio/")
-        tag = "audio" if audio else "video"
-        attrs = (f'id="pv" controls preload="none" data-id="{it["id"]}" '
+    def player(it: dict, src: Source, start: float) -> str:
+        tag = "audio" if src.mime.startswith("audio/") else "video"
+        attrs = (f'id="pv" controls preload="none" src="{url(src.url)}" data-id="{it["id"]}" '
                  f'data-t="{start:g}" data-total="{it.get("duration") or 0:g}"')  # fmt: skip
-        if not audio:
+        if tag == "video":
             poster = sized(it["art"].get("backdrop") or it["art"].get("thumb"), 1024)
             attrs += f' poster="{url(poster)}"' if poster else ""
-        if d["mode"] == "direct":
-            sources = f'<source src="{url(d["url"])}" type="{e(d["mime"])}">'
-        else:
-            # HLS first: iOS plays it natively and can seek; other old browsers
-            # skip it for the progressive stream (which restarts at ?start=).
-            sources = (f'<source src="{url(d["hls_url"])}" type="application/vnd.apple.mpegurl">'
-                       if d.get("hls_url") else "")  # fmt: skip
-            prog = f"/api/items/{it['id']}/stream.mp4?start={start:g}"
-            sources += f'<source src="{url(prog)}" type="{e(d["mime"])}">'
-        return (f'<div class="pl {tag}"><{tag} {attrs}>{sources}</{tag}></div>'
+        # One src, no <source> list: old Safari's source picking is unreliable.
+        # The link opens the same stream in the device's own player, a way
+        # out if the page's player won't start (it can't resume or save, though).
+        return (f'<div class="pl {tag}"><{tag} {attrs}></{tag}></div>'
+                f'<p><a class="btn" href="{url(src.url)}">Play full screen</a></p>'
                 f"{PLAYER_JS}")  # fmt: skip
 
     def neighbours(it: dict, album: str | None, artist: str | None, ctx: str) -> str:
@@ -396,6 +399,50 @@ def track_list(tracks: list[dict], *, album: str = "", artist: str = "") -> str:
         for t in tracks
     )
     return f'<ol class="tracks">{rows}</ol>'
+
+
+@dataclass(frozen=True)
+class Source:
+    url: str
+    mime: str
+    route: str  # for the log: why this stream
+
+
+# What Safari on iOS (9 onwards) and older Macs play as it is. Anything else
+# goes through the server: video as HLS (Apple's own format; progressive
+# streams need byte ranges, which a live conversion can't give), audio as an
+# MP3 stream.
+APPLE_VIDEO_EXTS = {".mp4", ".m4v", ".mov"}
+APPLE_AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".mp4"}
+APPLE_AUDIO = {"aac", "mp3", "alac"}
+_APPLE_UA = re.compile(r"iPhone|iPad|iPod|Macintosh")
+
+
+def apple(ua: str) -> bool:
+    """Safari on an Apple device (on iOS every browser is Safari underneath)."""
+    return bool(_APPLE_UA.search(ua)) and "Chrome/" not in ua and "Firefox/" not in ua
+
+
+def choose(it: dict, d: dict, start: float, is_apple: bool) -> Source:
+    """``d``: what /api/items/{id}/play decided for a modern browser."""
+    iid, ext = it["id"], PurePosixPath(it.get("file") or "").suffix.lower()
+    acodec = next((st["codec"] for st in it.get("streams", []) if st["type"] == "audio"), None)
+    if d["mime"].startswith("audio/"):
+        if d["mode"] == "direct" and (not is_apple or (ext in APPLE_AUDIO_EXTS
+                                                       and acodec in APPLE_AUDIO)):  # fmt: skip
+            return Source(d["url"], d["mime"], "original file")
+        return Source(f"/api/items/{iid}/stream.mp3?start={start:g}", "audio/mpeg", "MP3 stream")
+    if not is_apple:
+        if d["mode"] == "direct":
+            return Source(d["url"], d["mime"], "original file")
+        return Source(f"/api/items/{iid}/stream.mp4?start={start:g}", "video/mp4", "MP4 stream")
+    v = it.get("video") or {}
+    if (d["mode"] == "direct" and ext in APPLE_VIDEO_EXTS and v.get("codec") == "h264"
+            and (v.get("height") or 0) <= 1080 and acodec in (None, "aac", "mp3")):  # fmt: skip
+        return Source(d["url"], d["mime"], "original file")
+    if it.get("duration"):
+        return Source(f"/api/items/{iid}/hls.m3u8", "application/vnd.apple.mpegurl", "HLS")
+    return Source(f"/api/items/{iid}/stream.mp4?start={start:g}", "video/mp4", "MP4 stream")
 
 
 class LiteError(Exception):

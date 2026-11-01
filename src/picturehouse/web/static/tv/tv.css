@@ -217,7 +217,7 @@ h2 { font: 700 1.5rem/1.2 var(--display); margin: 2rem 0 1rem; color: var(--fg);
 .cbtn.on { background: var(--accent); color: var(--accent-ink); }
 .cbtn.on span { color: var(--accent-ink); }
 .ctl .sep { width: .15rem; height: 3rem; background: var(--line); margin: 0 1rem; }
-.vctl { justify-content: flex-start; margin-top: 1rem; }
+.vctl { margin-top: 1rem; }  /* centred, like the music and photo controls */
 .pvmusic { text-align: center; color: var(--muted); margin-top: .8rem; font-size: 1.05rem; min-height: 1.4rem; }
 .pview-info .osd-title, .pview-info .osd-sub { text-align: center; }
 

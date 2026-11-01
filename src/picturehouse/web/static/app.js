@@ -1776,6 +1776,36 @@ async function openPlayer(id, from) {
     else await loadAt(start);
   } catch (e) { if (P === p) playerError(e.message); }
 }
+/* Up next: when an episode ends, the next one in the series starts after a
+   10 s countdown (as in the TV app). Play now / Cancel; replaying cancels it. */
+async function upNext(p) {
+  const it = p.item;
+  if (!it || it.kind !== 'episode' || !it.show_key) return;
+  let sh;
+  try { sh = await api(`/api/shows/${enc(it.show_key)}`); } catch (e) { return; }
+  if (P !== p) return;
+  const eps = (sh.season_list || []).reduce((all, x) => all.concat(x.episodes), []);
+  const i = eps.findIndex(e => e.id === it.id), next = i >= 0 ? eps[i + 1] : null;
+  if (!next) { pmsg('<p>That was the last episode.</p>'); return; }
+  let left = 10;
+  p.upNext = next;
+  const tick = () => {
+    if (P !== p || p.upNext !== next) return;
+    if (left <= 0) { playUpNext(p); return; }
+    pmsg(`<p><b>Up next: ${esc(join(epCode(next), next.title))}</b></p><p>Starting in ${left} s</p>
+      <div class="formbtns"><button class="btn primary small" id="upnow">Play now</button><button class="btn small" id="upcancel">Cancel</button></div>`);
+    left--;
+    p.upNextT = setTimeout(tick, 1000);
+  };
+  tick();
+  const b = $('#upnow'); if (b) b.focus({ preventScroll: true });
+}
+function playUpNext(p) {
+  const next = p.upNext; if (!next) return;
+  clearTimeout(p.upNextT); p.upNext = null;
+  openPlayer(next.id, 0);
+}
+function cancelUpNext(p) { clearTimeout(p.upNextT); p.upNext = null; pmsg(null); }
 function devLine(p, where) {
   const it = p.item;
   return join(it && it.kind === 'episode' ? join(epCode(it), it.title) : '', where);
@@ -1983,7 +2013,8 @@ V.addEventListener('canplay', () => { if (P && !P.cast && !P.failed && !$('#pmsg
 // 'pause' also fires at the end; 'ended' saves then, so don't send a second request at the same moment.
 V.addEventListener('pause', () => { androidKeepAwake(false); if (!P || P.cast) return; P.playing = false; drawPlayer(); if (!V.ended) saveProgress(false); poke(); });
 V.addEventListener('timeupdate', () => { if (P && !P.cast) drawPlayer(); });
-V.addEventListener('ended', () => { if (!P || P.cast) return; P.playing = false; P.hold = P.total || curPos(); saveProgress(true); drawPlayer(); poke(); });
+V.addEventListener('ended', () => { if (!P || P.cast) return; P.playing = false; P.hold = P.total || curPos(); saveProgress(true); drawPlayer(); poke(); upNext(P); });
+V.addEventListener('play', () => { if (P && P.upNext) cancelUpNext(P); });  // watching again instead
 const BUSY_MSG = 'the server is already converting as many videos as it can for other viewers. Try again when one of them finishes.';
 V.addEventListener('error', async () => {
   if (!P || P.cast || !V.getAttribute('src')) return;
@@ -2288,7 +2319,7 @@ function castEnded() {
   p.cast = null; p.how = null; p.hold = t;
   saveProgress(true);
   castBox(); castUI();
-  if (ended) { p.hold = p.total; drawPlayer(); return; }
+  if (ended) { p.hold = p.total; drawPlayer(); upNext(p); return; }
   toast('Casting ended · playing in this browser');
   loadAt(t);
 }
@@ -2404,6 +2435,8 @@ document.addEventListener('click', e => {
   if (ds.act) { act(ds.act, t); return; }
   if (t.id === 'mplay' && M) { if (M.failed) playTrack(M.queue, M.i); else if (A.paused) A.play().catch(() => {}); else A.pause(); return; }
   if (t.id === 'pretry' && P) { loadAt(curPos()); return; }
+  if (t.id === 'upnow' && P) { playUpNext(P); return; }
+  if (t.id === 'upcancel' && P) { cancelUpNext(P); poke(); return; }
   const p = P; if (!p) return;
   poke();
   if (t.id === 'pext') { openInApp(); return; }

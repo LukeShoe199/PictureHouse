@@ -1810,6 +1810,22 @@ function devLine(p, where) {
   const it = p.item;
   return join(it && it.kind === 'episode' ? join(epCode(it), it.title) : '', where);
 }
+/* Codecs this browser decodes beyond the basics, sent as ?caps= so HEVC files
+   are played as they are instead of converted (a NAS's processor may not
+   convert them in real time). Hardware HEVC: current Chrome/Edge, Android,
+   Safari. If a browser says yes and then fails, the player retries without. */
+const CAPS = (() => {
+  const v = document.createElement('video');
+  const can = codec => {
+    const type = `video/mp4; codecs="${codec}"`;
+    try { if (v.canPlayType(type)) return true; } catch (e) { /* no canPlayType */ }
+    try { return !!(window.MediaSource && MediaSource.isTypeSupported(type)); } catch (e) { return false; }
+  };
+  const out = [];
+  if (can('hvc1.1.6.L120.90') || can('hev1.1.6.L120.90')) out.push('hevc');
+  if (out.length && (can('hvc1.2.4.L120.90') || can('hev1.2.4.L120.90'))) out.push('hevc10');
+  return out.join(',');
+})();
 async function loadAt(t) {
   const p = P; if (!p) return;
   if (p.cast) { castLoad(t); return; }
@@ -1819,7 +1835,8 @@ async function loadAt(t) {
   pmsg('<p>Starting stream…</p>');
   drawPlayer();
   let d;
-  try { d = await api(`/api/items/${enc(p.id)}/play?start=${Math.floor(t)}`); }
+  const caps = p.noCaps ? '' : CAPS;
+  try { d = await api(`/api/items/${enc(p.id)}/play?start=${Math.floor(t)}${caps ? '&caps=' + caps : ''}`); }
   catch (e) { if (P === p && tok === p.tok) playerError(e.message); return; }
   if (P !== p || tok !== p.tok) return;
   p.play = d;
@@ -2020,6 +2037,13 @@ V.addEventListener('error', async () => {
   if (!P || P.cast || !V.getAttribute('src')) return;
   if (P.hls && !P.mediaRetry) { P.mediaRetry = true; P.hls.recoverMediaError(); return; }
   const e = V.error, p = P;
+  // Said it could play HEVC but couldn't (a codec variant, no hardware after all): convert instead.
+  if (CAPS && !p.noCaps && p.play && /&caps=|\/file$/.test(V.getAttribute('src')) && p.item && p.item.video && p.item.video.codec === 'hevc') {
+    p.noCaps = true;
+    toast('This device couldn\'t play the original; converting it instead');
+    loadAt(curPos());
+    return;
+  }
   // A refused conversion (503) looks like any other media error to <video>: ask the server whether it is full.
   if (!P.hls && /\/stream\.mp4/.test(V.getAttribute('src'))) {
     try {

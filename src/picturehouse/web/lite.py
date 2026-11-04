@@ -376,7 +376,7 @@ def router(svc, api, profiles=None) -> APIRouter:
         body = f"<h1>{e(it['title'])}</h1>{meta_line(it)}"
         try:
             ua = request.headers.get("user-agent", "")
-            src = choose(it, call(api.play, item_id, start, "browser"), start, apple(ua))
+            src = choose(it, call(api.play, item_id, start, "browser", ""), start, apple(ua))
             log.info("Lite play: %s", src.route, extra={"item": item_id, "ua": ua})
             body += player(it, src, start)
         except LiteError as ex:

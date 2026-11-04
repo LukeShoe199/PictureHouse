@@ -17,6 +17,10 @@ MP4_FAMILY = "mov,mp4,m4a,3gp,3g2,mj2"
 EIGHT_BIT = {"yuv420p", "yuvj420p", None}
 
 BROWSER_VIDEO = {"h264", "vp8", "vp9", "av1"}
+# Codecs only some browsers decode (hardware HEVC: current Chrome/Edge, Android,
+# Safari). The console asks the browser and says so with ?caps=: sending the
+# original saves the server a conversion it may not manage in real time (a NAS).
+CAPS = {"hevc", "hevc10"}
 BROWSER_AUDIO = {"aac", "mp3", "opus", "vorbis", "flac"}
 BROWSER_DIRECT_EXTS = {".mp4", ".m4v", ".mov", ".webm", ".m4a", ".mp3", ".flac", ".ogg", ".opus",
                        ".oga", ".wav"}  # fmt: skip
@@ -58,14 +62,23 @@ def mime_of(item: MediaItem) -> str:
     return MIME_BY_EXT.get(ext_of(item), "application/octet-stream")
 
 
-def _video_ok_browser(item: MediaItem) -> bool:
+def parse_caps(text: str | None) -> frozenset[str]:
+    """``hevc,hevc10`` from the console; unknown words are ignored."""
+    return frozenset(w for w in (text or "").replace(" ", "").split(",") if w in CAPS)
+
+
+def _video_ok_browser(item: MediaItem, caps: frozenset[str] = frozenset()) -> bool:
+    if item.vcodec == "hevc":
+        ten_bit = bool(item.pix_fmt) and item.pix_fmt not in EIGHT_BIT
+        return "hevc" in caps and (not ten_bit or "hevc10" in caps)
     if item.vcodec not in BROWSER_VIDEO:
         return False
     # Browsers decode 8-bit H.264 only; 10-bit (Hi10P) fails silently.
     return not (item.vcodec == "h264" and item.pix_fmt not in EIGHT_BIT)
 
 
-def decide_browser(item: MediaItem) -> Decision:
+def decide_browser(item: MediaItem, caps: frozenset[str] = frozenset()) -> Decision:
+    """``caps``: extra codecs this browser decodes (see CAPS)."""
     if item.media_type not in ("video", "audio"):
         return Decision("none", "the file could not be read")
     ext = ext_of(item)
@@ -74,7 +87,7 @@ def decide_browser(item: MediaItem) -> Decision:
         if audio_ok and ext in BROWSER_DIRECT_EXTS:
             return Decision("direct", "original file")
         return Decision("transcode", f"{item.acodec} audio converted to AAC")
-    video_ok = _video_ok_browser(item)
+    video_ok = _video_ok_browser(item, caps)
     if is_hdr(item):
         # Browsers on SDR screens show PQ/HLG washed out; tone-map to SDR.
         return Decision("transcode", f"HDR {item.vcodec} tone-mapped to SDR H.264",

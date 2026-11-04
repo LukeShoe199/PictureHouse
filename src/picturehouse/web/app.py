@@ -53,7 +53,7 @@ from picturehouse.services import Services
 from picturehouse.streaming import images, procs
 from picturehouse.streaming import levels as levels_mod
 from picturehouse.streaming.artwork import find_artwork
-from picturehouse.streaming.decide import decide_browser, decide_dlna, mime_of
+from picturehouse.streaming.decide import decide_browser, decide_dlna, mime_of, parse_caps
 from picturehouse.streaming.hls import HlsError, HlsManager
 from picturehouse.streaming.hls import playlist as hls_playlist_text
 from picturehouse.themes import ThemeStore, render_css
@@ -614,7 +614,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
 
     @api.get("/items/{item_id}/play")
     def play(item_id: int, start: float = Query(0.0, ge=0),
-             client: Literal["browser", "tv"] = "browser"):  # fmt: skip
+             client: Literal["browser", "tv"] = "browser",
+             caps: str = Query("", max_length=60)):  # fmt: skip
         """``client=tv``: the LG TV app (webOS). Its player handles what the TV
         does over DLNA (HEVC, MKV, AC3, HDR), so it gets the original file
         whenever the DLNA profile allows, else HLS, which webOS plays natively."""
@@ -624,15 +625,21 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
                 raise HTTPException(409, "this file is not available right now")
             if client == "tv":
                 return tv_play(i)
-            d = decide_browser(i)
+            c = parse_caps(caps)
+            d = decide_browser(i, c)
             if d.mode == "direct":
                 url, mime, seekable = f"/api/items/{i.id}/file", mime_of(i), True
             else:
                 url = f"/api/items/{i.id}/stream.mp4?start={start:g}"
+                if c:  # the stream decides again: e.g. HEVC in MKV is repackaged, not re-encoded
+                    url += "&caps=" + ",".join(sorted(c))
                 mime = "audio/mp4" if i.media_type == "audio" else "video/mp4"
                 seekable = False
+            # Only when the video itself is re-encoded: a repackaged stream copies
+            # it, which costs the server next to nothing (HLS would re-encode).
             hls_url = (f"/api/items/{i.id}/hls.m3u8"
-                       if d.mode != "direct" and i.media_type == "video" and i.duration else None)  # fmt: skip
+                       if d.mode != "direct" and not d.copy_video and i.media_type == "video"
+                       and i.duration else None)  # fmt: skip
             return {"mode": d.mode, "reason": d.reason, "url": url, "mime": mime,
                     "duration": i.duration, "seekable": seekable, "start": 0 if seekable else start,
                     "hls_url": hls_url}  # fmt: skip
@@ -717,10 +724,14 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
 
     @api.get("/items/{item_id}/stream.mp4")
     def item_stream(request: Request, item_id: int, start: float = Query(0.0, ge=0),
-                    audio: int | None = None):  # fmt: skip
+                    audio: int | None = None, caps: str = Query("", max_length=60)):  # fmt: skip
         with svc.db.session() as s:
             i = get_item(s, item_id)
-            path, d, audio_only = item_path(i), decide_browser(i), i.media_type == "audio"
+            path, d, audio_only = (
+                item_path(i),
+                decide_browser(i, parse_caps(caps)),
+                i.media_type == "audio",
+            )
             label = f"web:{i.id}:{d.mode}"
             who = f"{device_name(request.headers.get('user-agent', ''))}: {i.title}"
         if not path.is_file():

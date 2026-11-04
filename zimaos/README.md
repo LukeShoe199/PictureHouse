@@ -14,7 +14,10 @@ your admin PIN, and press **Install**. Full steps are in
 | `build_docker.py` | Builds the image, and with `--push` publishes it to `ghcr.io/lukeshoe199/picturehouse`. |
 
 The image itself is built from [`../Dockerfile`](../Dockerfile). It contains
-the same server as every other platform, with FFmpeg included.
+the same server as every other platform, with FFmpeg included, and Intel's
+video driver: the app file passes the box's GPU in (`devices: /dev/dri`) so
+video is converted in hardware. On a machine without `/dev/dri`, remove
+those two lines (the container won't start otherwise).
 
 ## Publishing a new version
 
@@ -36,9 +39,8 @@ pushed before ZimaOS can install it.
 ## Licences
 
 PictureHouse is MIT-licensed (see [`../LICENSE`](../LICENSE)). The image also
-contains a static build of [FFmpeg](https://ffmpeg.org) 7.1.1 from
-[`mwader/static-ffmpeg`](https://github.com/wader/static-ffmpeg), which is
-licensed under the GPL. Its source code is available from
-[ffmpeg.org](https://ffmpeg.org/download.html#releases) and the build
-recipe from that repository. The Windows and Linux downloads don't include
+contains [Jellyfin's build of FFmpeg](https://github.com/jellyfin/jellyfin-ffmpeg)
+8.1.3 (with Intel's media driver), which is licensed under the GPL. Its
+source code and build recipe are in that repository; FFmpeg's own is at
+[ffmpeg.org](https://ffmpeg.org/download.html#releases). The Windows and Linux downloads don't include
 FFmpeg; they use the copy installed on the computer.

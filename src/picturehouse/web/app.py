@@ -50,7 +50,7 @@ from picturehouse.metadata.api_client import MetadataApiError
 from picturehouse.paths import long_path, resolve_in_root
 from picturehouse.profiles import SCOPE, ProfileError, ProfileStore
 from picturehouse.services import Services
-from picturehouse.streaming import images, procs
+from picturehouse.streaming import hwaccel, images, procs
 from picturehouse.streaming import levels as levels_mod
 from picturehouse.streaming.artwork import find_artwork
 from picturehouse.streaming.decide import decide_browser, decide_dlna, mime_of, parse_caps
@@ -264,6 +264,10 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        # Is there a GPU to convert on (streaming/hwaccel.py)? A second or two:
+        # in the background, conversions use the processor until it's known.
+        threading.Thread(target=hwaccel.detect, args=(svc.ffmpeg.path,), daemon=True,
+                         name="hwaccel-detect").start()  # fmt: skip
         yield
         hls_mgr.shutdown()
         procs.kill_all()
@@ -411,6 +415,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             "streams_active": procs.active_count(),
             "hls_encoders": hls_mgr.active_jobs,
             "transcodes": {"limit": procs.slots.limit, "active": procs.slots.holders()},
+            "hardware_video": hwaccel.status(),
             "metadata": metadata_state(),
             # What this device may do (see web/access.py).
             "access": admin_state(request),
@@ -675,6 +680,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             if i.media_type != "video" or not i.probe_ok:
                 raise HTTPException(400, "HLS is for video files")
             path, duration, hdr = item_path(i), i.duration, is_hdr(i)
+            vcodec, pix_fmt = i.vcodec, i.pix_fmt
             who = f"{device_name(request.headers.get('user-agent', ''))}: {i.title}"
             if audio is None:
                 tracks = [st for st in i.streams if st.type == "audio"]
@@ -685,7 +691,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
         if not path.is_file():
             raise HTTPException(404, "file is not reachable")
         try:
-            sess = hls_mgr.open(item_id, path, duration or 0, audio, hdr=hdr, client=c, who=who)
+            sess = hls_mgr.open(item_id, path, duration or 0, audio, hdr=hdr, client=c, who=who,
+                                vcodec=vcodec, pix_fmt=pix_fmt)  # fmt: skip
         except procs.TranscodeBusy as e:
             return busy_response(e)
         except HlsError as e:
@@ -732,6 +739,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
                 decide_browser(i, parse_caps(caps)),
                 i.media_type == "audio",
             )
+            vcodec, pix_fmt = i.vcodec, i.pix_fmt
             label = f"web:{i.id}:{d.mode}"
             who = f"{device_name(request.headers.get('user-agent', ''))}: {i.title}"
         if not path.is_file():
@@ -744,7 +752,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
                 return busy_response(e)
         cmd = procs.fmp4_cmd(svc.ffmpeg.path, path, start=start, audio_only=audio_only,
                              copy_video=d.copy_video, copy_audio=d.copy_audio and audio is None,
-                             audio_index=audio, hdr=d.hdr)  # fmt: skip
+                             audio_index=audio, hdr=d.hdr, vcodec=vcodec, pix_fmt=pix_fmt)  # fmt: skip
         return StreamingResponse(procs.stream_with_lease(cmd, label=label, lease=lease),
                                  media_type="audio/mp4" if audio_only else "video/mp4",
                                  headers={"Cache-Control": "no-store"})  # fmt: skip

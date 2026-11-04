@@ -27,6 +27,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from picturehouse.streaming import hwaccel
 from picturehouse.streaming.procs import FFmpegProcess, Lease, video_filter
 
 log = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ class HlsError(Exception):
 class Job:
     proc: FFmpegProcess
     start: int
+    gpu: bool = False  # converting on the GPU (hwaccel)
 
     def alive(self) -> bool:
         return self.proc.proc.poll() is None
@@ -62,6 +64,9 @@ class HlsSession:
     audio_index: int | None
     copy_video: bool = False
     hdr: bool = False
+    vcodec: str | None = None
+    pix_fmt: str | None = None
+    software: bool = False  # the GPU failed on this file: convert on the processor
     client: str | None = None
     who: str = "a viewer"  # for "server busy" messages
     lease: Lease | None = None  # transcode slot, held while the session is in use
@@ -102,16 +107,25 @@ def playlist(session: HlsSession, segment_url: str) -> str:
 def hls_cmd(ffmpeg: Path, session: HlsSession, start: int) -> list[str]:
     t = start * SEGMENT
     a_map = f"0:{session.audio_index}" if session.audio_index is not None else "0:a:0?"
+    hw = None if session.software else gpu_for(session)
     cmd = [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-nostdin"]
+    if hw:
+        cmd += hw.input_args(session.vcodec, session.pix_fmt)
     if t:
         cmd += ["-ss", str(t)]
     cmd += ["-i", str(session.src), "-map", "0:V:0", "-map", a_map, "-sn", "-dn"]
+    if hw:
+        cmd += hw.video_args(session.vcodec, session.pix_fmt)
+    else:
+        cmd += [
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p",
+            "-profile:v", "high", "-level:v", "4.1", "-vf", video_filter(ffmpeg, session.hdr),
+            "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
+            "-sc_threshold", "0",
+        ]  # fmt: skip
     cmd += [
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p",
-        "-profile:v", "high", "-level:v", "4.1", "-vf", video_filter(ffmpeg, session.hdr),
-        "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
         # Keyframe exactly on the segment grid, so every run cuts identical segments.
-        "-force_key_frames", f"expr:gte(t,n_forced*{SEGMENT})", "-sc_threshold", "0",
+        "-force_key_frames", f"expr:gte(t,n_forced*{SEGMENT})",
         "-c:a", "aac", "-b:a", "192k", "-ac", "2",
         "-output_ts_offset", str(t),
         "-f", "hls", "-hls_time", str(SEGMENT), "-hls_list_size", "0",
@@ -121,6 +135,10 @@ def hls_cmd(ffmpeg: Path, session: HlsSession, start: int) -> list[str]:
         str(session.dir / "ffmpeg.m3u8"),
     ]  # fmt: skip
     return cmd
+
+
+def gpu_for(session: HlsSession) -> hwaccel.HwVideo | None:
+    return hwaccel.for_video(session.vcodec, session.pix_fmt, session.hdr)
 
 
 class HlsManager:
@@ -143,6 +161,7 @@ class HlsManager:
     def open(
         self, item_id: int, src: Path, duration: float, audio_index: int | None = None,
         hdr: bool = False, client: str | None = None, who: str = "a viewer",
+        vcodec: str | None = None, pix_fmt: str | None = None,
     ) -> HlsSession:  # fmt: skip
         """Get (or create) the session for this item + audio track.
 
@@ -170,7 +189,7 @@ class HlsManager:
         d = self.root / sid
         d.mkdir(parents=True)
         s = HlsSession(sid, item_id, src, duration, d, audio_index, hdr=hdr, client=client,
-                       who=who, lease=lease)  # fmt: skip
+                       who=who, lease=lease, vcodec=vcodec, pix_fmt=pix_fmt)  # fmt: skip
         with self._lock:
             self._sessions[sid] = s
             self._by_key[key] = sid
@@ -245,6 +264,15 @@ class HlsManager:
                 return path
             with s.lock:
                 job = s.job
+                if job is not None and not job.alive() and job.gpu and not path.exists():
+                    # The GPU couldn't do this file (a codec variant it can't decode,
+                    # a driver hiccup): the processor takes over for this session.
+                    tail = job.proc.stderr_tail[-1] if job.proc.stderr_tail else "no message"
+                    log.warning("hardware conversion failed, using the processor: %s", tail,
+                                extra={"session": s.id, "item": s.item_id})  # fmt: skip
+                    s.software = True
+                    self._start_job(s, k)
+                    continue
                 if job is None or not job.alive():
                     # Stopped (throttled by another request's timing, or crashed)
                     # before reaching k. Restart once; a second failure is real.
@@ -265,7 +293,9 @@ class HlsManager:
         for tmp in s.dir.glob("*.tmp"):
             tmp.unlink(missing_ok=True)
         log.info("HLS encoding from segment %d", k, extra={"session": s.id, "item": s.item_id})
-        s.job = Job(FFmpegProcess(hls_cmd(self.ffmpeg, s, k), label=f"hls:{s.item_id}:{k}"), k)
+        gpu = not s.software and gpu_for(s) is not None
+        s.job = Job(FFmpegProcess(hls_cmd(self.ffmpeg, s, k), label=f"hls:{s.item_id}:{k}"), k,
+                    gpu=gpu)  # fmt: skip
 
     @staticmethod
     def _stop_job(s: HlsSession) -> None:

@@ -998,6 +998,10 @@ function streamingHTML(s, status) {
   if (!slots.some(r => r[0] === +s.max_transcodes)) slots.push([+s.max_transcodes, String(s.max_transcodes)]);
   const t = (status && status.transcodes) || {};
   const now = (t.active || []).length ? `Converting now: ${(t.active || []).map(esc).join(', ')}.` : 'Nothing is being converted right now.';
+  // Which chip converts (streaming/hwaccel.py): the GPU when there is one.
+  const hw = status && status.hardware_video;
+  const how = hw && hw.active ? `Videos are converted on the graphics chip (Intel Quick Sync${hw.active.low_power ? ', low-power mode' : ''}).`
+    : hw ? `Videos are converted on the processor${hw.why_not ? ` (no graphics chip to use: ${hw.why_not})` : ''}.` : '';
   return `<form class="panel metaform" id="streamform" novalidate autocomplete="off" style="margin-top:12px">
     <div class="form">
       <label class="field">TV bitrate limit<select name="rate" data-nav>${rates.map(([v, l]) => opt(v, l, s.tv_max_bitrate_mbps)).join('')}</select></label>
@@ -1005,7 +1009,7 @@ function streamingHTML(s, status) {
     </div>
     <div class="formbtns"><button type="submit" class="btn primary small" data-nav>Save</button></div>
     <p class="formerr" id="streamerr" role="alert" hidden></p>
-    <p class="note">TV keeps buffering? It's usually Wi-Fi that can't keep up with a big file. With a limit set, videos above it are converted to fit as they play (the TV can still seek). A network cable to the TV avoids the need. ${esc(now)}</p>
+    <p class="note">TV keeps buffering? It's usually Wi-Fi that can't keep up with a big file. With a limit set, videos above it are converted to fit as they play (the TV can still seek). A network cable to the TV avoids the need. ${esc(how)} ${esc(now)}</p>
   </form>`;
 }
 async function submitStreaming(f) {

@@ -256,9 +256,14 @@ Good to know:
   from `docker-compose.yml` before importing.
 - **The library** (database, artwork, settings) is kept in
   `/DATA/AppData/picturehouse`. Back that folder up.
-- **Converting video uses the CPU.** ZimaBoard and ZimaBlade play most files
-  directly with ease, but converting 4K, or several videos at once, is too
-  much for them. Keep **Library → DLNA → Videos converted at once** at 1.
+- **Converting video uses the graphics chip when there is one.** Boxes with
+  Intel graphics (most ZimaOS hardware: ZimaBoard, ZimaBlade, mini PCs with
+  Celeron or N-series chips) convert on it (Quick Sync), fast enough for HD
+  in real time. Library → DLNA says which chip is in use. Without one, the
+  processor converts, which is too slow for HD on small boxes: keep
+  **Videos converted at once** at 1. Either way, phones and browsers that
+  play HEVC get the original file and nothing is converted. HDR films are
+  always converted on the processor (for now).
 - **Updating:** the app follows PictureHouse's `latest` release, so when a
   new version is out, ZimaOS offers it under **My Apps → Update**. Your
   library is kept (it lives in `/DATA/AppData/picturehouse`).

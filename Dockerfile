@@ -25,12 +25,25 @@ LABEL org.opencontainers.image.source="https://github.com/LukeShoe199/PictureHou
       org.opencontainers.image.title="PictureHouse" \
       org.opencontainers.image.description="Home media server: films, TV, music and photos to TVs, phones and browsers."
 ENV PYTHONUNBUFFERED=1 \
-    PATH=/app/.venv/bin:$PATH \
+    PATH=/app/.venv/bin:/usr/lib/jellyfin-ffmpeg:$PATH \
     PICTUREHOUSE_DATA_DIR=/data \
     PICTUREHOUSE_MEDIA_HINT=/media
-# FFmpeg 7.1, a self-contained static build: Debian's package would pull in
-# ~450 MB of graphics libraries (LLVM, Mesa) a headless server never uses.
-COPY --from=mwader/static-ffmpeg:7.1.1 /ffmpeg /ffprobe /usr/local/bin/
+# FFmpeg: Jellyfin's build, because it brings Intel's video driver (Quick Sync
+# through VAAPI): a NAS's processor can't convert HD video in real time, its
+# GPU can (streaming/hwaccel.py; the container needs /dev/dri, see
+# zimaos/docker-compose.yml). Without a GPU it works as plain FFmpeg.
+# Pinned by version and checksum; bump both together.
+ARG JELLYFIN_FFMPEG=8.1.3-1
+ARG JELLYFIN_FFMPEG_SHA256=fbef9f81a53e175194e3f67832618a86111f7bd37197df21a5d748c34289f9c0
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
+ && curl -fsSL -o /tmp/ffmpeg.deb \
+      "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v${JELLYFIN_FFMPEG}/jellyfin-ffmpeg8_${JELLYFIN_FFMPEG}-trixie_amd64.deb" \
+ && echo "${JELLYFIN_FFMPEG_SHA256}  /tmp/ffmpeg.deb" | sha256sum -c - \
+ && apt-get install -y --no-install-recommends /tmp/ffmpeg.deb \
+ && rm /tmp/ffmpeg.deb \
+ && apt-get purge -y curl && apt-get autoremove -y \
+ && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/.venv /app/.venv
 
 VOLUME /data

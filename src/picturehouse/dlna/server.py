@@ -282,7 +282,8 @@ class DLNAServer:
             d = decide_dlna(item, tv_max_bitrate())
             ff = svc.ffmpeg.path
             cmd = (procs.mpegts_cmd(ff, path, start=start, copy_video=d.copy_video, hdr=d.hdr,
-                                    max_bitrate=d.max_bitrate) if ext == "ts"
+                                    max_bitrate=d.max_bitrate, vcodec=item.vcodec,
+                                    pix_fmt=item.pix_fmt) if ext == "ts"
                    else procs.mp3_cmd(ff, path, start=start))  # fmt: skip
             lease = None
             if ext == "ts" and not d.copy_video:  # only video encodes are capped

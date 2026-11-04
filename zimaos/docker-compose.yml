@@ -15,6 +15,11 @@ services:
     # then on the ZimaOS address, port 9595.
     network_mode: host
     restart: unless-stopped
+    # The Intel GPU, for converting video in hardware (Quick Sync): a small
+    # box's processor can't do HD in real time. Remove these two lines on a
+    # machine without /dev/dri (the container won't start otherwise).
+    devices:
+      - /dev/dri:/dev/dri
     environment:
       # Your own 4 to 12 digits, numbers only: REQUIRED. No browser ever counts as "the PC
       # running PictureHouse" on a NAS, so folders and settings are changed

@@ -27,6 +27,7 @@ from pathlib import Path
 import anyio
 
 from picturehouse.ffmpeg import no_window_flags
+from picturehouse.streaming import hwaccel
 
 log = logging.getLogger(__name__)
 
@@ -311,8 +312,9 @@ def x264_args(ffmpeg: Path, hdr: bool = False, max_bitrate: int | None = None) -
     return args
 
 
-def _input(ffmpeg: Path, src: Path, start: float) -> list[str]:
-    cmd = [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-nostdin"]
+def _input(ffmpeg: Path, src: Path, start: float, pre: list[str] | None = None) -> list[str]:
+    """``pre``: input options (hardware decoding) that go before ``-i``."""
+    cmd = [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-nostdin", *(pre or [])]
     if start > 0:
         cmd += ["-ss", f"{start:.3f}"]
     return [*cmd, "-i", str(src)]
@@ -321,15 +323,21 @@ def _input(ffmpeg: Path, src: Path, start: float) -> list[str]:
 def fmp4_cmd(
     ffmpeg: Path, src: Path, *, start: float, audio_only: bool,
     copy_video: bool, copy_audio: bool, audio_index: int | None = None, hdr: bool = False,
+    vcodec: str | None = None, pix_fmt: str | None = None,
 ) -> list[str]:  # fmt: skip
-    """Fragmented MP4 to stdout, playable progressively by browsers."""
-    cmd = _input(ffmpeg, src, start)
+    """Fragmented MP4 to stdout, playable progressively by browsers.
+    ``vcodec``/``pix_fmt``: the source's, so the GPU can convert (hwaccel)."""
+    hw = None if audio_only or copy_video else hwaccel.for_video(vcodec, pix_fmt, hdr)
+    cmd = _input(ffmpeg, src, start, hw.input_args(vcodec, pix_fmt) if hw else None)
     a_map = f"0:{audio_index}" if audio_index is not None else "0:a:0?"
     if audio_only:
         cmd += ["-vn", "-map", a_map]
     else:
         cmd += ["-map", "0:V:0", "-map", a_map]  # V = real video, not cover art
-        cmd += ["-c:v", "copy"] if copy_video else x264_args(ffmpeg, hdr)
+        if copy_video:
+            cmd += ["-c:v", "copy"]
+        else:
+            cmd += hw.video_args(vcodec, pix_fmt) if hw else x264_args(ffmpeg, hdr)
     cmd += ["-c:a", "copy"] if copy_audio else ["-c:a", "aac", "-b:a", "192k", "-ac", "2"]
     cmd += ["-sn", "-dn", "-map_metadata", "-1",
             "-movflags", "frag_keyframe+empty_moov+default_base_moof"]  # fmt: skip
@@ -343,13 +351,17 @@ def fmp4_cmd(
 
 def mpegts_cmd(
     ffmpeg: Path, src: Path, *, start: float, copy_video: bool, hdr: bool = False,
-    max_bitrate: int | None = None,
+    max_bitrate: int | None = None, vcodec: str | None = None, pix_fmt: str | None = None,
 ) -> list[str]:  # fmt: skip
     """MPEG-TS H.264/AAC to stdout: the format nearly every DLNA TV streams."""
-    cmd = _input(ffmpeg, src, start)
+    hw = None if copy_video else hwaccel.for_video(vcodec, pix_fmt, hdr)
+    cmd = _input(ffmpeg, src, start, hw.input_args(vcodec, pix_fmt) if hw else None)
     cmd += ["-map", "0:V:0", "-map", "0:a:0?"]
-    cmd += (["-c:v", "copy", "-bsf:v", "h264_mp4toannexb"] if copy_video
-            else x264_args(ffmpeg, hdr, max_bitrate))  # fmt: skip
+    if copy_video:
+        cmd += ["-c:v", "copy", "-bsf:v", "h264_mp4toannexb"]
+    else:
+        cmd += (hw.video_args(vcodec, pix_fmt, max_bitrate) if hw
+                else x264_args(ffmpeg, hdr, max_bitrate))  # fmt: skip
     cmd += ["-c:a", "aac", "-b:a", "192k", "-ac", "2", "-sn", "-dn", "-f", "mpegts", "pipe:1"]
     return cmd
 

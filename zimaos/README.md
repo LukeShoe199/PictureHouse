@@ -19,15 +19,6 @@ video driver: the app file passes the box's GPU in (`devices: /dev/dri`) so
 video is converted in hardware. On a machine without `/dev/dri`, remove
 those two lines (the container won't start otherwise).
 
-**USB drives that never sleep.** ZimaOS's disk-sleep setting can't reach the
-drives in many USB enclosures, and its health checks then keep them spinning
-around the clock. The app file includes a small second service,
-`drive-sleep`, that puts USB hard drives to sleep after
-`PICTUREHOUSE_DRIVE_SLEEP_MINUTES` (default 60) without reads or writes; the
-next read wakes them (10-20 s). It sees only the drives, not your files or
-the network. Check with `docker logs picturehouse-drive-sleep`; remove the
-block if your drives already sleep.
-
 ## Publishing a new version
 
 ```bash

@@ -1058,8 +1058,10 @@ def drives_sleep_idle(
 ) -> None:
     """Keep running, putting USB hard drives to sleep once idle for a while.
 
-    For enclosures a NAS's own sleep setting can't reach (ZimaOS: see
-    zimaos/docker-compose.yml). Reads only memory counters while waiting."""
+    For enclosures a NAS's own sleep setting can't reach. Reads only memory
+    counters while waiting. Test with `drives sleep` and a file read first:
+    some enclosures drop off USB when woken this way (an NTFS drive is then
+    left unmountable on Linux until Windows has opened it)."""
     import signal
 
     from picturehouse import drivesleep

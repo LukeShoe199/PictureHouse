@@ -83,35 +83,6 @@ services:
           description:
             en_us: DLNA discovery for TVs.
 
-  # Puts idle USB hard drives to sleep. ZimaOS's own disk-sleep setting can't
-  # reach drives in many USB enclosures, and its health checks then keep
-  # them spinning for good. This watches the drives' read/write counters
-  # (memory only) and sends the sleep command after the time below.
-  # Separate from PictureHouse so only this small service can send drive
-  # commands; it has no network and sees no files. Remove this whole block
-  # if your drives already sleep.
-  drive-sleep:
-    image: ghcr.io/lukeshoe199/picturehouse:latest
-    container_name: picturehouse-drive-sleep
-    command: ["drives", "sleep-idle"]
-    network_mode: none
-    restart: unless-stopped
-    environment:
-      # Minutes without reads or writes before a drive sleeps (match the
-      # sleep time you chose in ZimaOS's settings).
-      PICTUREHOUSE_DRIVE_SLEEP_MINUTES: "60"
-    # Sending a drive command needs this capability, and the drives
-    # themselves (major 8: sd* disks, plugged in now or later).
-    cap_add:
-      - SYS_RAWIO
-    device_cgroup_rules:
-      - "b 8:* rw"
-    volumes:
-      - type: bind
-        source: /dev
-        target: /dev
-    healthcheck:
-      disable: true
 
 x-casaos:
   architectures:

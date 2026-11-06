@@ -16,6 +16,11 @@ it be. The next read wakes it by itself (a spin-up of 10-20 s).
 
 Only rotating disks are touched, and by default only USB ones (internal
 disks are the NAS's own job).
+
+Not part of the ZimaOS app: on the TerraMaster USB RAID enclosure it was
+built for, the drive dropped off USB after its first sleep, and its NTFS
+volume wouldn't mount on Linux again until Windows had opened it. Manual,
+tested-first use only.
 """
 
 from __future__ import annotations

@@ -261,9 +261,11 @@ Good to know:
   so the disks spin down whenever your NAS's own sleep setting says. (Only
   folders on network shares are still rescanned every few hours.) The first
   thing played after a nap takes a few seconds longer while the disk wakes.
-  USB enclosures often ignore the NAS's own sleep setting: on ZimaOS the app's
-  `drive-sleep` service handles those (zimaos/README.md); on other Linux
-  boxes run `picturehouse drives sleep-idle --after 60` as root.
+  Some USB enclosures ignore the NAS's own sleep setting. As a last resort,
+  `picturehouse drives sleep-idle --after 60` (as root) sends the sleep
+  command itself, but test it first with `picturehouse drives sleep sdX` and
+  then read a file: some enclosures drop off USB when woken this way, which
+  leaves an NTFS drive unmountable until Windows has opened it once.
 - **Converting video uses the graphics chip when there is one.** Boxes with
   Intel graphics (most ZimaOS hardware: ZimaBoard, ZimaBlade, mini PCs with
   Celeron or N-series chips) convert on it (Quick Sync), fast enough for HD

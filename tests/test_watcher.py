@@ -132,3 +132,72 @@ def test_drive_plugged_in_and_out_is_scanned_straight_away(media_library, tmp_pa
         assert _titles(svc) == [] and "Amélie" in _titles(svc, available=False)
     finally:
         svc.close()
+
+
+# ---------------------------------------------------------------- idle drives
+
+
+MOUNTINFO = (
+    "22 1 8:2 / / rw,relatime shared:1 - ext4 /dev/sda2 rw\n"
+    "40 22 8:17 / /media/My\\040Drive rw,relatime shared:9 - ntfs3 /dev/sdb1 rw\n"
+    "41 22 0:50 / /mnt/nas rw,relatime shared:10 - cifs //nas/films rw\n"
+    "42 41 0:51 / /mnt/nas/usb rw,relatime shared:11 - exfat /dev/sdc1 rw\n"
+)
+
+
+def test_mount_table_says_what_storage_a_folder_is_on(monkeypatch):
+    from pathlib import PurePosixPath
+
+    from picturehouse.library import mounts
+
+    assert mounts.fs_type(PurePosixPath("/media/My Drive/Films"), MOUNTINFO) == "ntfs3"
+    assert mounts.fs_type(PurePosixPath("/media/My Drives"), MOUNTINFO) == "ext4"  # not a prefix
+    assert mounts.fs_type(PurePosixPath("/mnt/nas/Films"), MOUNTINFO) == "cifs"
+    assert mounts.fs_type(PurePosixPath("/mnt/nas/usb/x"), MOUNTINFO) == "exfat"  # deepest wins
+    monkeypatch.setattr(mounts.sys, "platform", "linux")
+    monkeypatch.setattr(mounts.os, "name", "posix")
+    assert not mounts.is_network(PurePosixPath("/media/My Drive/Films"), MOUNTINFO)
+    assert mounts.is_network(PurePosixPath("/mnt/nas/Films"), MOUNTINFO)
+
+
+def test_watched_local_libraries_need_no_periodic_rescan(watched):
+    """Rescanning a watched local disk finds nothing new and keeps a NAS's
+    drives from ever sleeping, so serve's periodic rescan skips it."""
+    svc, _ = watched
+    assert svc.watcher.covers("Films")
+    assert not svc.watcher.covers("Elsewhere")
+    svc.watcher.stop()
+    assert not svc.watcher.covers("Films")  # watcher gone: rescan again
+
+
+def test_idle_watcher_leaves_the_drives_alone(media_library, tmp_path, monkeypatch):
+    """While nothing changes and no drive comes or goes, the watched library
+    folders aren't looked at (that would wake a sleeping disk). A missing
+    library folder is still looked for, and turns up when created."""
+    from picturehouse.library import mounts
+
+    monkeypatch.setattr(watcher_mod, "SETTLE_MS", 300)
+    monkeypatch.setattr(watcher_mod, "RECHECK_MS", 300)
+    monkeypatch.setattr(mounts, "mount_table", lambda: "the same mounts")
+    looked: list = []
+    real = watcher_mod._is_dir
+    monkeypatch.setattr(watcher_mod, "_is_dir", lambda p: looked.append(p) or real(p))
+    films, later = tmp_path / "Films", tmp_path / "Later"
+    films.mkdir()
+    toml = (
+        f"[[libraries]]\nname='Films'\npath='{films}'\nkind='films'\n"
+        f"[[libraries]]\nname='Later'\npath='{later}'\nkind='films'\n"
+    )
+    svc = open_services(parse_config(toml), DataLayout(tmp_path / "d"), tmp_path / "d" / "c.toml")
+    try:
+        svc.watcher = FolderWatcher(svc.db, svc.scanner)
+        svc.watcher.start()
+        assert _wait_for(lambda: "Films" in svc.watcher.watching)
+        time.sleep(0.3)
+        looked.clear()
+        time.sleep(2.0)  # several re-check periods with nothing happening
+        assert films not in looked and later in looked
+        later.mkdir()
+        assert _wait_for(lambda: "Later" in svc.watcher.watching, 10)
+    finally:
+        svc.close()

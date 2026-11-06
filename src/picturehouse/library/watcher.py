@@ -8,6 +8,11 @@ that don't deliver events.
 Large copies produce a stream of events for minutes; we wait for a quiet
 period (``SETTLE_MS``) before scanning, and a file still being copied when
 we do scan simply fails its probe and is picked up again when it changes.
+
+Idle drives must be able to sleep: nothing here reads the library folders
+while nothing changes. Change events cost no disk access, and on Linux a
+drive coming or going is noticed in the mount table (memory) rather than by
+looking at the folders; only then, or after a change event, are they checked.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from sqlalchemy import select
 
 from picturehouse.db import Database
 from picturehouse.db.models import LibraryRootRow
+from picturehouse.library import mounts
 from picturehouse.library.naming import is_ignored_dir, is_media_file
 from picturehouse.library.scanner import Scanner
 from picturehouse.log import log_context, new_job_id
@@ -30,7 +36,7 @@ log = logging.getLogger(__name__)
 
 SETTLE_MS = 5_000  # quiet time before a batch of changes is acted on
 MAX_BATCH_MS = 60_000  # act at least this often during a long burst
-RECHECK_MS = 20_000  # how often to re-check which roots exist (USB drives come and go)
+RECHECK_MS = 20_000  # how often to look for drives that came or went (USB drives)
 
 
 def _relevant(change: watchfiles.Change, path: str) -> bool:
@@ -41,6 +47,13 @@ def _relevant(change: watchfiles.Change, path: str) -> bool:
     return is_media_file(p.name) or (not p.suffix and not p.name.startswith("."))
 
 
+def _is_dir(p: Path) -> bool:
+    try:
+        return p.is_dir()
+    except OSError:
+        return False
+
+
 class FolderWatcher:
     def __init__(self, db: Database, scanner: Scanner) -> None:
         self.db = db
@@ -49,6 +62,9 @@ class FolderWatcher:
         self._reload = threading.Event()
         self._thread: threading.Thread | None = None
         self.watching: dict[str, Path] = {}
+        # Watched folders on local disks: change events cover them fully, so
+        # they need no periodic rescan (see covers()).
+        self.local: set[str] = set()
 
     # ------------------------------------------------------------- control
 
@@ -62,24 +78,26 @@ class FolderWatcher:
         if self._thread:
             self._thread.join(timeout=10)
 
+    def covers(self, name: str) -> bool:
+        """True when this library's changes are reliably seen as they happen
+        (a local disk being watched), so a periodic rescan would only wake
+        the drive for nothing. Network shares: changes made by other
+        machines raise no events here, so they still need rescanning."""
+        return name in self.local and self._thread is not None and self._thread.is_alive()
+
     def reload(self) -> None:
         """Library folders changed: rebuild the watch list."""
         self._reload.set()
 
     # ------------------------------------------------------------- loop
 
-    def _roots(self) -> dict[str, Path]:
+    def _configured(self) -> dict[str, Path]:
         with self.db.session() as s:
             rows = list(s.scalars(select(LibraryRootRow).where(LibraryRootRow.configured)))
-        out = {}
-        for row in rows:
-            p = Path(row.path)
-            try:
-                if p.is_dir():
-                    out[row.name] = p
-            except OSError:
-                pass
-        return out
+        return {row.name: Path(row.path) for row in rows}
+
+    def _roots(self) -> dict[str, Path]:
+        return {n: p for n, p in self._configured().items() if _is_dir(p)}
 
     def _run(self) -> None:
         previous: set[str] | None = None
@@ -87,6 +105,8 @@ class FolderWatcher:
             self._reload.clear()
             roots = self._roots()
             self.watching = roots
+            table = mounts.mount_table()
+            self.local = {n for n, p in roots.items() if not mounts.is_network(p, table)}
             # A drive plugged in or out (or a share back online): scan those
             # folders now, so they show as available/offline straight away
             # rather than at the next periodic scan.
@@ -111,6 +131,8 @@ class FolderWatcher:
 
     def _watch(self, roots: dict[str, Path]) -> None:
         last_check = time.monotonic()
+        table = mounts.mount_table()  # None off Linux: look at the folders instead
+        changed = False  # since the last look at the folders
         for changes in watchfiles.watch(
             *roots.values(),
             watch_filter=_relevant,
@@ -125,11 +147,23 @@ class FolderWatcher:
             if self._stop.is_set():
                 return
             if changes:
+                changed = True
                 names = self._roots_for(changes, roots)
                 if names:
                     self._scan(names, len(changes))
             if time.monotonic() - last_check > RECHECK_MS / 1000:
                 last_check = time.monotonic()
+                if table is not None:
+                    # Don't look at the watched folders unless a drive came or
+                    # went, or something changed (a folder deleted outright
+                    # raises an event): looking would wake sleeping drives.
+                    # Missing folders are still looked for (one created later).
+                    now = mounts.mount_table()
+                    if now == table and not changed:
+                        missing = [p for n, p in self._configured().items() if n not in roots]
+                        if not any(_is_dir(p) for p in missing):
+                            continue
+                    table, changed = now, False
                 if set(self._roots()) != set(roots):  # a root went offline or came back
                     log.info("library folder availability changed; rebuilding watch list")
                     return

@@ -1070,7 +1070,15 @@ def serve_cmd(
             web.state.start_audio_check()  # anything unchecked or changed since last time
         interval = settings.scan.interval_minutes * 60
         while interval and not stop.wait(interval):
-            web.state.start_scan()
+            # Libraries the folder watcher sees changes in as they happen are
+            # skipped: rescanning them finds nothing and keeps the drives
+            # from sleeping (a NAS's disks would spin up every few hours).
+            names = [r.name for r in svc.settings.libraries
+                     if not (svc.watcher and svc.watcher.covers(r.name))]  # fmt: skip
+            if names:
+                web.state.start_scan(names)
+            else:
+                log.info("periodic rescan skipped: every library is watched for changes")
 
     p = server_cfg.http_port
     ips = local_ipv4_addresses() if server_cfg.host in ("0.0.0.0", "::") else [server_cfg.host]

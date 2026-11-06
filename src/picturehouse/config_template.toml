@@ -56,6 +56,7 @@ max_bitrate_mbps = 0
 [scan]
 on_startup = true        # incremental scan when the server starts
 interval_minutes = 360   # incremental rescan every N minutes while running; 0 = off
+                         # (only network shares: watched local disks are left to sleep)
 watch = true             # notice new/changed files within seconds (rescan is the backstop)
 audio_check = true       # flag films/episodes whose sound looks broken (e.g. missing dialogue)
 

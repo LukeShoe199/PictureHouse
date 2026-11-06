@@ -256,6 +256,11 @@ Good to know:
   from `docker-compose.yml` before importing.
 - **The library** (database, artwork, settings) is kept in
   `/DATA/AppData/picturehouse`. Back that folder up.
+- **Drives can sleep.** While nobody is watching, PictureHouse doesn't touch
+  the media drives: new files are noticed as they arrive, without rescanning,
+  so the disks spin down whenever your NAS's own sleep setting says. (Only
+  folders on network shares are still rescanned every few hours.) The first
+  thing played after a nap takes a few seconds longer while the disk wakes.
 - **Converting video uses the graphics chip when there is one.** Boxes with
   Intel graphics (most ZimaOS hardware: ZimaBoard, ZimaBlade, mini PCs with
   Celeron or N-series chips) convert on it (Quick Sync), fast enough for HD

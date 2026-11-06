@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import os
@@ -54,6 +55,10 @@ profile_app = typer.Typer(
     help="Profiles: who's watching, child profiles and the exit code.", no_args_is_help=True
 )
 app.add_typer(profile_app, name="profile")
+drives_app = typer.Typer(
+    help="Hard drives: put idle USB drives to sleep (Linux NAS boxes).", no_args_is_help=True
+)
+app.add_typer(drives_app, name="drives")
 
 
 @dataclass(frozen=True)
@@ -980,6 +985,94 @@ def logs_cmd(
         typer.echo(f"{when} {e['level']:<7} {e['msg']}" + (f"  [{extras}]" if extras else ""))
         if e.get("exc"):
             typer.echo(e["exc"])
+
+
+# --------------------------------------------------------------------------
+# drives
+# --------------------------------------------------------------------------
+
+
+def _linux_only() -> None:
+    if not sys.platform.startswith("linux"):
+        raise PictureHouseError(
+            "drive sleep is for Linux NAS boxes",
+            hint="Windows and macOS put idle drives to sleep themselves.",
+        )
+
+
+@drives_app.command("list")
+@handles_errors
+def drives_list() -> None:
+    """Show the hard drives, whether they spin, and whether they're asleep."""
+    from picturehouse import drivesleep
+
+    _linux_only()
+    found = drivesleep.disks()
+    if not found:
+        typer.echo("No drives found.")
+        return
+    stats = drivesleep.read_activity()
+    for d in found:
+        kind = ("USB " if d.usb else "internal ") + ("hard drive" if d.rotational else "SSD")
+        state = drivesleep.power_mode(d.dev) if d.rotational else "-"
+        r, w, _ = stats.get(d.name, (0, 0, 0))
+        typer.echo(f"{d.name:<5} {d.model or '?':<24} {kind:<18} {state:<8} "
+                   f"reads {r}, writes {w}")  # fmt: skip
+
+
+@drives_app.command("sleep")
+@handles_errors
+def drives_sleep(name: Annotated[str, typer.Argument(help="Drive, e.g. sdb")]) -> None:
+    """Put one drive to sleep now (it wakes by itself when next read)."""
+    from picturehouse import drivesleep
+
+    _linux_only()
+    if not any(d.name == name for d in drivesleep.disks()):
+        raise PictureHouseError(f"no drive {name!r}", hint="see `picturehouse drives list`")
+    try:
+        drivesleep.standby(drivesleep.DEV / name)
+    except OSError as e:
+        raise PictureHouseError(
+            str(e),
+            hint="either the drive (or its enclosure) doesn't take the sleep command, "
+            "or this needs root / CAP_SYS_RAWIO",
+        ) from e
+    typer.echo(f"{name}: {drivesleep.power_mode(drivesleep.DEV / name)}")
+
+
+@drives_app.command("sleep-idle")
+@handles_errors
+def drives_sleep_idle(
+    after: Annotated[
+        int,
+        typer.Option(
+            "--after",
+            envvar="PICTUREHOUSE_DRIVE_SLEEP_MINUTES",
+            min=1,
+            help="Minutes without reads or writes before a drive sleeps.",
+        ),
+    ] = 60,  # fmt: skip
+    all_disks: Annotated[
+        bool, typer.Option("--all-disks", help="Internal hard drives too, not only USB ones.")
+    ] = False,
+) -> None:
+    """Keep running, putting USB hard drives to sleep once idle for a while.
+
+    For enclosures a NAS's own sleep setting can't reach (ZimaOS: see
+    zimaos/docker-compose.yml). Reads only memory counters while waiting."""
+    import signal
+
+    from picturehouse import drivesleep
+
+    _linux_only()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    sleeper = drivesleep.Sleeper(after=after * 60, all_disks=all_disks)
+    names = [f"{d.name} ({d.model})" for d in sleeper.candidates()]
+    log.info("drive sleep: after %d min idle; drives now: %s", after, ", ".join(names) or "none")
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    with contextlib.suppress(KeyboardInterrupt):
+        sleeper.run(stop)
 
 
 # --------------------------------------------------------------------------

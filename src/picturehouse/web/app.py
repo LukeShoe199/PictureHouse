@@ -92,6 +92,7 @@ class NewLibrary(BaseModel):
     name: str
     path: str
     kind: Literal["films", "tv", "music", "home_videos", "photos", "mixed"] = "mixed"
+    kids: bool = False  # children's films / TV / music: child profiles see it all
 
 
 class MatchRequest(BaseModel):
@@ -969,7 +970,9 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     @api.post("/libraries", status_code=201)
     def create_library(body: NewLibrary):
         try:
-            add_root(svc.config_file, body.name.strip(), Path(body.path.strip()), body.kind)
+            add_root(
+                svc.config_file, body.name.strip(), Path(body.path.strip()), body.kind, body.kids
+            )
             svc.reload_settings()
         except PictureHouseError as e:
             raise HTTPException(400, e.message) from e

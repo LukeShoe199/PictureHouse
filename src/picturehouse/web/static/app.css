@@ -597,7 +597,7 @@ body.phv-open { overflow: hidden; }
 
 /* Profiles (picturehouse.profiles): the who's-watching button, and child mode. */
 .profbtn .pav { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; margin-left: -6px;
-  background: var(--accent); color: var(--on-accent); font: 700 13px/1 var(--body); }
+  background: var(--accent); color: var(--accent-ink); font: 700 13px/1 var(--body); }
 .profbtn.child .pav { background: var(--good); }
 .devopt .pav { display: none; }
 :root[data-child] #nav-library { display: none; }
@@ -607,8 +607,25 @@ body.phv-open { overflow: hidden; }
 .kidsline { margin-top: 10px; }
 label.kidsline { display: flex; align-items: flex-start; min-height: 0; color: var(--fg); }
 label.kidsline input { flex: none; margin-top: 1px; }
-.hidegrid th:not(:first-child), .hidegrid td:not(:first-child) { text-align: center; }
-.hidegrid input { width: 18px; height: 18px; accent-color: var(--accent); }
+.typesel { min-height: 34px; padding: 4px 8px; font-size: 13.5px; }
+.shownto { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.shownto label { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; white-space: nowrap; cursor: pointer; }
+.shownto label.blocked { color: var(--faint); cursor: help; }
+.shownto input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
+/* Who's watching? (once per app launch) */
+.splash { position: fixed; inset: 0; z-index: 60; background: var(--bg); display: grid; place-content: center; justify-items: center;
+  gap: 28px; padding: 24px 16px; overflow-y: auto; text-align: center; }
+.splash h1 { margin: 0; font: 800 clamp(30px, 6vw, 52px)/1 var(--display); font-stretch: 75%; text-transform: uppercase; }
+.splash-row { display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(14px, 3vw, 32px); }
+.splash-tile { display: grid; justify-items: center; gap: 8px; width: clamp(108px, 22vw, 160px); padding: 10px 6px 12px; border-radius: var(--r-panel); color: var(--muted); }
+.splash-tile b { color: var(--fg); font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.splash-tile small { font-size: 12.5px; min-height: 1em; }
+.splash-av { width: clamp(84px, 18vw, 128px); aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink); font: 800 clamp(34px, 7vw, 54px)/1 var(--display); transition: transform .15s, box-shadow .15s; }
+.splash-tile.child .splash-av { background: var(--good); }
+.splash-tile:hover .splash-av, .splash-tile:focus-visible .splash-av { transform: scale(1.06); box-shadow: 0 0 0 4px var(--fg); }
+.splash-tile:focus-visible { outline: none; }
+.splash-note { margin: 0; color: var(--muted); font-size: 14px; }
 .check { display: flex; align-items: center; gap: 8px; align-self: end; min-height: 44px; }
 .kidslibs input, .check input { width: 18px; height: 18px; accent-color: var(--accent); }
 .codeform { display: grid; gap: 12px; max-width: 340px; }

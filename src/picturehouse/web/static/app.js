@@ -696,6 +696,9 @@ VIEWS.search = {
 const KINDS = [['films', 'Films'], ['tv', 'TV series'], ['music', 'Music'], ['home_videos', 'Home videos'], ['mixed', 'Mixed']];
 const mediaHint = () => S.status && S.status.server && S.status.server.media_hint;
 const kindLabel = k => (KINDS.find(x => x[0] === k) || [k, k || '—'])[1];
+// Children's folders: everything in them is fine for child profiles (kids = true).
+const KID_KINDS = [['films', "Children's films"], ['tv', "Children's TV"], ['music', "Children's music"]];
+const libLabel = l => l.kids ? ((KID_KINDS.find(x => x[0] === l.kind) || [0, `Children's ${kindLabel(l.kind).toLowerCase()}`])[1]) : kindLabel(l.kind);
 VIEWS.library = {
   title: 'Library',
   async load() {
@@ -731,7 +734,7 @@ VIEWS.library = {
         <div class="form">
           <label class="field">Name<input name="name" required placeholder="Films" data-nav></label>
           <label class="field">Folder path<span class="pathrow"><input name="path" required placeholder="${esc(mediaHint() ? mediaHint().replace(/\/+$/, '') + '/Films' : 'D:\\Media\\Films')}" data-nav><button type="button" class="btn small" data-nav data-act="browse-open">Browse…</button></span></label>
-          <label class="field">Contains<select name="kind" data-nav>${KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+          <label class="field">Contains<select name="kind" data-nav>${KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}<optgroup label="For children">${KID_KINDS.map(([k, l]) => `<option value="${k}+kids">${esc(l)}</option>`).join('')}</optgroup></select></label>
           <div class="formbtns"><button type="submit" class="btn primary small" data-nav>Add folder</button><button type="button" class="btn small" data-nav data-act="cancel-add">Cancel</button></div>
         </div>
         <div class="browser" id="browser" hidden></div>
@@ -741,17 +744,31 @@ VIEWS.library = {
     const added = L.justAdded ? `<div class="panel addok"><span>Added “${esc(L.justAdded)}”. Scan it now to read its files?</span>
         <button class="btn primary small" data-nav data-act="scan-one" data-lib="${esc(L.justAdded)}">Scan now</button>
         <button class="btn small" data-nav data-act="dismiss-added">Later</button></div>` : '';
+    const plist0 = (d.profiles && !d.profiles._err && d.profiles.profiles) || [];
+    const admin = !!(d.admin && d.admin.admin);
+    // Type: a children's folder can be switched to the plain kind and back without a rescan.
+    const typeCell = l => {
+      const kid = KID_KINDS.find(x => x[0] === l.kind);
+      if (!admin || !kid) return esc(libLabel(l));
+      return `<select class="typesel" data-nav data-kidslib="${esc(l.name)}" aria-label="What ${esc(l.name)} contains">
+        <option value="0"${l.kids ? '' : ' selected'}>${esc(kindLabel(l.kind))}</option><option value="1"${l.kids ? ' selected' : ''}>${esc(kid[1])}</option></select>`;
+    };
+    // Shown to: one tick per profile. Child profiles only ever see children's folders.
+    const shownCell = l => plist0.length < 2 ? '' : `<td><div class="shownto">${plist0.map(x => {
+      const blocked = x.child && !l.kids, on = !blocked && !(l.hidden_from || []).includes(x.id);
+      return `<label class="${blocked ? 'blocked' : ''}" title="${blocked ? `${esc(x.name)} is a child profile: it only sees children's folders (and titles you approve on their pages)` : ''}"><input type="checkbox" data-nav data-showlib="${esc(l.name)}" data-prof="${x.id}"${on ? ' checked' : ''}${blocked || !admin ? ' disabled' : ''}> ${esc(x.name)}</label>`;
+    }).join('')}</div></td>`;
     const rows = d.libs.map(l => {
       const status = l.available
         ? (l.last_scan_at ? `<span class="pill">Available</span>` : `<span class="pill quiet">Not scanned yet</span>`)
         : `<span class="pill off">Offline${l.unavailable_since ? ' since ' + esc(fmtWhen(l.unavailable_since)) : ''}</span>`;
       const confirming = L.confirm === l.name;
-      return `<tr><td>${esc(l.name)}</td><td class="mono">${esc(l.path)}</td><td>${esc(kindLabel(l.kind))}</td>
+      return `<tr><td>${esc(l.name)}</td><td class="mono">${esc(l.path)}</td><td>${typeCell(l)}</td>${shownCell(l)}
         <td class="num">${fmtNum(l.items)}</td><td class="num">${esc(fmtBytes(l.bytes))}</td><td>${status}</td>
         <td class="num"><button class="rowbtn${confirming ? ' danger' : ''}" data-nav data-act="remove" data-lib="${esc(l.name)}">${confirming ? 'Confirm remove' : 'Remove'}</button></td></tr>`;
     }).join('');
     const table = d.libs.length
-      ? `<div class="panel tablewrap" style="padding-block:4px"><table><thead><tr><th>Name</th><th>Location</th><th>Type</th><th style="text-align:right">Items</th><th style="text-align:right">Size</th><th>Status</th><th><span hidden>Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ? `<div class="panel tablewrap" style="padding-block:4px"><table><thead><tr><th>Name</th><th>Location</th><th>Type</th>${plist0.length < 2 ? '' : '<th>Shown to</th>'}<th style="text-align:right">Items</th><th style="text-align:right">Size</th><th>Status</th><th><span hidden>Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
       : `<div class="panel empty"><p>No folders yet. Add one to start building your library.</p>${L.adding ? '' : '<button class="btn primary small" data-nav data-act="add">Add folder</button>'}</div>`;
     const pf = (d.problems && d.problems.files) || [], plib = (d.problems && d.problems.libraries) || [];
     const paud = (d.problems && d.problems.audio) || [];
@@ -846,12 +863,50 @@ async function pickProfile(id, code) {
   try {
     const res = await api('/api/profiles/current', { method: 'PUT', body: { id, code } });
     setProfiles(res);
+    try { sessionStorage.setItem(PICKED, '1'); } catch (er) { /* fine */ }
     location.reload();
   } catch (e) {
     if (S.sheet && S.sheet.mode === 'code') { const err = $('#codeerr'); err.textContent = e.message; err.hidden = false; const i = $('#codeform input'); i.value = ''; i.focus(); }
     else toast('Could not change profile: ' + e.message);
   }
 }
+/* Who's watching? Once each time the app is opened (per tab/app session), when
+   there's more than one profile, so nobody browses as the wrong person. */
+const PICKED = 'ph-profile-picked';
+function showSplash() {
+  const p = S.profiles;
+  if (!p || !p.profiles || p.profiles.length < 2 || $('#splash')) return;
+  try { if (sessionStorage.getItem(PICKED)) return; } catch (e) { return; }
+  const el = document.createElement('div');
+  el.id = 'splash'; el.className = 'splash';
+  el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'splashTitle');
+  el.innerHTML = `<h1 id="splashTitle">Who's watching?</h1>
+    <div class="splash-row">${p.profiles.map(x => `<button class="splash-tile${x.child ? ' child' : ''}" data-splash="${x.id}">
+      <span class="splash-av" aria-hidden="true">${esc(x.name.slice(0, 1).toUpperCase())}</span>
+      <b>${esc(x.name)}</b><small>${x.child ? 'Child' : x.id === p.current.id ? 'This device' : ''}</small></button>`).join('')}</div>
+    ${p.current.child ? '<p class="splash-note">Grown-up profiles need the exit code.</p>' : ''}`;
+  for (const n of document.body.children) n.inert = true;
+  document.body.append(el);
+  const cur = el.querySelector(`[data-splash="${p.current.id}"]`) || el.querySelector('button');
+  setTimeout(() => cur.focus(), 0);
+}
+function closeSplash() {
+  const el = $('#splash'); if (!el) return;
+  try { sessionStorage.setItem(PICKED, '1'); } catch (e) { /* private mode: ask again next time */ }
+  el.remove();
+  for (const n of document.body.children) n.inert = false;
+}
+function splashPick(id) { closeSplash(); pickProfile(id); }
+document.addEventListener('keydown', e => {
+  const el = $('#splash'); if (!el) return;
+  const tiles = [...el.querySelectorAll('button')], i = tiles.indexOf(document.activeElement);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') tiles[Math.min(tiles.length - 1, i + 1)].focus();
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') tiles[Math.max(0, i - 1)].focus();
+  else if (e.key === 'Escape' || e.key === 'Backspace') closeSplash();  // stay as you are
+  else if (e.key === 'Enter' || e.key === ' ') { if (i >= 0) splashPick(+tiles[i].dataset.splash); }
+  else return;
+  e.preventDefault(); e.stopImmediatePropagation();
+}, true);
 function openCodeSheet(target) {
   openSheet({ mode: 'code', target });
   $('#sheetBox').innerHTML = `${sheetHead('Leave the child profile', `Switch to ${target.name}`)}
@@ -865,7 +920,7 @@ function profilesHTML(p, admin, libs) {
   if (!p || p._err) return `<div class="panel"><p class="note">Profiles couldn't be loaded${p && p._err ? `: ${esc(p._err)}` : ''}.</p></div>`;
   const L = S.lib;
   const kids = libs.filter(l => l.kids).map(l => l.name);
-  const intro = `<p class="note">Each device uses one profile (pick it with the button at the top). A <b>child</b> profile only sees the kids libraries ticked below and titles you approve${kids.length ? '' : ' (no kids libraries yet)'}; leaving it needs the exit code. Each profile has its own Continue watching. TVs browsing over DLNA see everything.</p>`;
+  const intro = `<p class="note">Each device uses one profile, chosen when the app opens or with the button at the top. A <b>child</b> profile sees children's folders (set a folder's type above) and films or series you approve on their own pages, nothing else${kids.length ? '' : ' (no children\'s folders yet)'}; leaving it needs the exit code. Which profiles see each folder is set in the Folders table. Each profile has its own Continue watching. TVs browsing over DLNA see everything.</p>`;
   if (!admin) {
     return `<div class="panel">${intro}<ul class="addrs">${p.profiles.map(x => `<li>${esc(x.name)}${x.child ? ' (child)' : ''}</li>`).join('')}</ul>
       <p class="note">Profiles are managed on the PC running PictureHouse, or here after entering the admin PIN.</p></div>`;
@@ -881,14 +936,6 @@ function profilesHTML(p, admin, libs) {
         ${main ? '' : `<button class="rowbtn" data-nav data-act="prof-kind" data-id="${x.id}" data-child="${x.child ? '0' : '1'}">${x.child ? 'Make adult' : 'Make child'}</button>
         <button class="rowbtn${confirming ? ' danger' : ''}" data-nav data-act="prof-remove" data-id="${x.id}">${confirming ? 'Confirm remove' : 'Remove'}</button>`}</td></tr>`;
   }).join('');
-  const kidsBoxes = libs.length
-    ? `<div class="kidslibs">${libs.map(l => `<label><input type="checkbox" data-nav data-kidslib="${esc(l.name)}"${l.kids ? ' checked' : ''}> ${esc(l.name)}</label>`).join('')}</div>`
-    : '<p class="note">Add a folder first.</p>';
-  const hideGrid = libs.length ? `<div class="panel"><h3>Hide libraries</h3>
-      <p class="note">A hidden library doesn't appear anywhere on that profile: lists, search, Continue watching. Handy for keeping the kids' folders off your own profile. It's tidiness, not a lock.</p>
-      <div class="tablewrap"><table class="hidegrid"><thead><tr><th>Library</th>${p.profiles.map(x => `<th>Hide from ${esc(x.name)}</th>`).join('')}</tr></thead><tbody>
-      ${libs.map(l => `<tr><td>${esc(l.name)}${l.kids ? ' <span class="pill quiet">Kids</span>' : ''}</td>${p.profiles.map(x => `<td><input type="checkbox" data-nav data-hidelib="${esc(l.name)}" data-prof="${x.id}" aria-label="Hide ${esc(l.name)} from ${esc(x.name)}"${(l.hidden_from || []).includes(x.id) ? ' checked' : ''}></td>`).join('')}</tr>`).join('')}
-      </tbody></table></div></div>` : '';
   return `<div class="panel">${intro}
       <div class="tablewrap profiles"><table><thead><tr><th>Profile</th><th>Kind</th><th><span hidden>Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>
       <form class="form" id="profadd" novalidate autocomplete="off" style="margin-top:12px">
@@ -897,13 +944,12 @@ function profilesHTML(p, admin, libs) {
         <div class="formbtns"><button type="submit" class="btn small" data-nav>Add profile</button></div></form>
       <p class="formerr" id="proferr" role="alert" hidden></p></div>
     <div class="two">
-      <div class="panel"><h3>Kids libraries</h3><p class="note">Child profiles see only these, plus films and series you approve on their own pages (“Child profiles can watch this”).</p>${kidsBoxes}</div>
       <form class="panel" id="exitform" novalidate autocomplete="off"><h3>Exit code</h3>
         <p class="note">${p.exit_code_set ? 'Set. Asked for when leaving a child profile.' : 'Not set yet. Needed before any device can use a child profile.'} Separate from the admin PIN.</p>
         <label class="field">${p.exit_code_set ? 'New exit code' : 'Exit code'}<input name="code" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="12" autocomplete="new-password" placeholder="4 to 12 digits" data-nav></label>
         <div class="formbtns"><button type="submit" class="btn small" data-nav>${p.exit_code_set ? 'Change code' : 'Set code'}</button></div>
         <p class="formerr" id="exiterr" role="alert" hidden></p></form>
-    </div>${hideGrid}`;
+    </div>`;
 }
 async function profAct(name, btn) {
   const L = S.lib, id = +btn.dataset.id;
@@ -952,20 +998,22 @@ async function submitProfileForm(f) {
 document.addEventListener('change', async e => {
   const t = e.target, ds = t.dataset || {};
   if (ds.kidslib) {
-    try { await api(`/api/libraries/${enc(ds.kidslib)}`, { method: 'PUT', body: { kids: t.checked } }); toast(`${ds.kidslib}: ${t.checked ? 'child profiles can see it' : 'hidden from child profiles'}`); route({ keepScroll: true }); }
-    catch (er) { t.checked = !t.checked; toast(er.message); }
+    const kids = t.value === '1';
+    try { await api(`/api/libraries/${enc(ds.kidslib)}`, { method: 'PUT', body: { kids } }); toast(`${ds.kidslib}: ${kids ? "a children's folder: child profiles see all of it" : 'child profiles no longer see it'}`); route({ keepScroll: true }); }
+    catch (er) { toast(er.message); route({ keepScroll: true }); }
   } else if (ds.kidsok) {
     try {
       await api(`${tBase(ds.kidsok, ds.id)}/kids`, { method: 'PUT', body: { approved: t.checked } });
       toast(t.checked ? 'Child profiles can watch it now' : 'Child profiles no longer see it');
     } catch (er) { t.checked = !t.checked; toast(er.message); }
-  } else if (ds.hidelib) {
-    const boxes = [...document.querySelectorAll('[data-hidelib]')].filter(b => b.dataset.hidelib === ds.hidelib);
-    const ids = boxes.filter(b => b.checked).map(b => +b.dataset.prof);
+  } else if (ds.showlib) {
+    // Unticked (and not blocked) = hidden from that profile.
+    const boxes = [...document.querySelectorAll('[data-showlib]')].filter(b => b.dataset.showlib === ds.showlib);
+    const ids = boxes.filter(b => !b.checked && !b.disabled).map(b => +b.dataset.prof);
     const who = S.profiles && S.profiles.profiles.find(x => x.id === +ds.prof);
     try {
-      await api(`/api/libraries/${enc(ds.hidelib)}`, { method: 'PUT', body: { hidden_from: ids } });
-      toast(`${ds.hidelib}: ${t.checked ? 'hidden from' : 'shown to'} ${who ? who.name : 'that profile'}`);
+      await api(`/api/libraries/${enc(ds.showlib)}`, { method: 'PUT', body: { hidden_from: ids } });
+      toast(`${ds.showlib}: ${t.checked ? 'shown to' : 'hidden from'} ${who ? who.name : 'that profile'}`);
       route({ keepScroll: true });
     } catch (er) { t.checked = !t.checked; toast(er.message); }
   } else if (ds.devprof) {
@@ -2512,6 +2560,7 @@ document.addEventListener('click', e => {
   if (!t.closest('.devwrap')) { toggleDevMenu(false); toggleProfMenu(false); }
   if ('devsel' in ds) { pickDevice(ds.devsel); return; }
   if ('profsel' in ds) { pickProfile(+ds.profsel); return; }
+  if ('splash' in ds) { splashPick(+ds.splash); return; }
   if (ds.href && t.closest('#devmenu')) toggleDevMenu(false);
   if (t.id === 'installbtn') { installApp(); return; }
   if (ds.href) { S.morphFrom = t.matches('.card') ? t.querySelector('.art') : null; nav(ds.href, { focusFirst: true }); return; }
@@ -2780,7 +2829,8 @@ document.addEventListener('submit', async e => {
   const f = e.target; if (f.id !== 'addform') return;
   e.preventDefault();
   const err = $('#adderr');
-  const body = { name: f.elements.name.value.trim(), path: f.elements.path.value.trim(), kind: f.elements.kind.value };
+  const [kind, kids] = f.elements.kind.value.split('+');
+  const body = { name: f.elements.name.value.trim(), path: f.elements.path.value.trim(), kind, kids: kids === 'kids' };
   const show = msg => { err.textContent = msg; err.hidden = false; };
   if (!body.name) { show('Give the folder a name.'); f.elements.name.focus(); return; }
   if (!body.path) { show('Enter the folder path.'); f.elements.path.focus(); return; }
@@ -2881,5 +2931,5 @@ window.PHConsole = {
 registerSW();
 refreshStatus();
 setInterval(refreshStatus, 30000);
-loadProfiles().then(() => route());  // the profile first: a child's pages read differently
+loadProfiles().then(() => { showSplash(); route(); });  // the profile first: a child's pages read differently
 })();

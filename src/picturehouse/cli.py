@@ -253,12 +253,16 @@ def library_add(
     name: Annotated[str, typer.Argument(help="Unique name, e.g. Films")],
     path: Annotated[Path, typer.Argument(help="Folder to index (local or network path)")],
     kind: KindOpt = "mixed",
+    kids: Annotated[
+        bool, typer.Option("--kids", help="A children's folder: child profiles see all of it")
+    ] = False,
 ) -> None:
     """Add a library folder to the config. Run `picturehouse scan` afterwards."""
     st: AppState = ctx.obj
-    add_root(st.config_file, name, path, kind)
+    add_root(st.config_file, name, path, kind, kids)
     note = "" if path.is_dir() else "  (folder not reachable right now — kept anyway)"
-    typer.echo(f"added library {name!r}: {path.absolute()} [{kind}]{note}")
+    what = f"children's {kind}" if kids else kind
+    typer.echo(f"added library {name!r}: {path.absolute()} [{what}]{note}")
 
 
 @library_app.command("remove")

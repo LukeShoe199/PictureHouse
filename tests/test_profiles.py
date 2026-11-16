@@ -198,6 +198,10 @@ def test_cli(tmp_path):
     lib.mkdir()
     assert cli("library", "add", "Kids", str(lib), "--kind", "films").exit_code == 0
     assert cli("library", "kids", "Kids").exit_code == 0
+    toons = tmp_path / "Cartoons"
+    toons.mkdir()
+    r = cli("library", "add", "Cartoons", str(toons), "--kind", "tv", "--kids")
+    assert r.exit_code == 0 and "children's tv" in r.output
     r = cli("profile", "add", "Sam", "--child")
     assert r.exit_code != 0 and "exit code first" in r.output
     assert cli("profile", "exit-code", input=f"{CODE}\n{CODE}\n").exit_code == 0
@@ -205,7 +209,7 @@ def test_cli(tmp_path):
     assert cli("profile", "assign", "192.168.1.50", "sam").exit_code == 0
     out = cli("profile", "list").output
     assert "Sam" in out and "child" in out and "192.168.1.50" in out
-    assert "kids libraries: Kids" in out and "exit code: set" in out
+    assert "kids libraries: Kids, Cartoons" in out and "exit code: set" in out
     assert cli("profile", "edit", "Sam", "--name", "Samuel").exit_code == 0
     assert cli("profile", "remove", "Samuel").exit_code == 0
     assert cli("profile", "remove", "Main").exit_code != 0
@@ -373,3 +377,16 @@ def test_cli_approvals_and_hiding(tmp_path, media_library):
     assert "TV: hidden from Main" in cli("profile", "list").output
     assert "shown to every profile" in cli("library", "hide", "TV").output
     assert cli("library", "hide", "Nope", "Main").exit_code != 0
+
+
+def test_a_childrens_folder_is_added_as_one(house, tmp_path):
+    pc, svc = house["pc"], house["svc"]
+    folder = tmp_path / "Kids Films"
+    folder.mkdir()
+    r = pc.post("/api/libraries", json={"name": "Kids Films", "path": str(folder),
+                                        "kind": "films", "kids": True})  # fmt: skip
+    try:
+        assert r.status_code == 201 and r.json()["kids"] is True and r.json()["kind"] == "films"
+        assert "kids = true" in svc.config_file.read_text(encoding="utf-8")
+    finally:
+        assert pc.delete("/api/libraries/Kids Films").status_code == 204

@@ -61,7 +61,7 @@ def _write_doc(config_file: Path, doc: tomlkit.TOMLDocument) -> Settings:
     return settings
 
 
-def add_root(config_file: Path, name: str, path: Path, kind: str) -> Settings:
+def add_root(config_file: Path, name: str, path: Path, kind: str, kids: bool = False) -> Settings:
     path = path.expanduser().absolute()
     if any(ord(c) < 32 for c in str(path)):
         raise ConfigError("the folder path contains control characters")
@@ -83,6 +83,8 @@ def add_root(config_file: Path, name: str, path: Path, kind: str) -> Settings:
     # Literal string keeps Windows backslashes readable in the file.
     entry.add("path", tomlkit.string(str(path), literal="'" not in str(path)))
     entry.add("kind", kind)
+    if kids:  # a children's folder: everything in it is fine for child profiles
+        entry.add("kids", True)
     libs.append(entry)
     return _write_doc(config_file, doc)
 

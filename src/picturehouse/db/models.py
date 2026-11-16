@@ -113,6 +113,9 @@ class MediaItem(Base):
     acodec: Mapped[str | None] = mapped_column(String(32))
     channels: Mapped[int | None] = mapped_column(Integer)
     has_embedded_art: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Approved for child profiles although it isn't in a kids library
+    # (episodes are approved by their show: KidsShow).
+    kids_ok: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     # Audio health check (library/audiocheck.py): ok | warn | error | dismissed.
     audio_check: Mapped[str | None] = mapped_column(String(12), index=True)
@@ -171,6 +174,16 @@ def is_hdr(item: MediaItem) -> bool:
     return (item.color_transfer or "") in HDR_TRANSFERS
 
 
+class KidsShow(Base):
+    """A series approved for child profiles wherever its episodes live, keyed
+    like ShowMeta by the folder name, so episodes added later are included."""
+
+    __tablename__ = "kids_show"
+
+    parsed_show: Mapped[str] = mapped_column(Text, primary_key=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class MediaStream(Base):
     __tablename__ = "media_stream"
 
@@ -196,8 +209,8 @@ class MediaStream(Base):
 
 
 class Profile(Base):
-    """Who's watching. Child profiles see kids libraries only; leaving one
-    needs the exit code. Profile 1 is the house default: it can be renamed
+    """Who's watching. Child profiles see kids libraries and approved titles
+    only; leaving one needs the exit code. Profile 1 is the house default: it can be renamed
     but not removed or made a child (see picturehouse.profiles)."""
 
     __tablename__ = "profile"
@@ -206,6 +219,20 @@ class Profile(Base):
     name: Mapped[str] = mapped_column(String(40), unique=True)
     child: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class HiddenLibrary(Base):
+    """A library one profile doesn't want to see (e.g. the kids' folders on
+    the grown-ups' profile). A preference, not a lock: see Profile.child."""
+
+    __tablename__ = "hidden_library"
+
+    profile_id: Mapped[int] = mapped_column(
+        ForeignKey("profile.id", ondelete="CASCADE"), primary_key=True
+    )
+    root_id: Mapped[int] = mapped_column(
+        ForeignKey("library_root.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class DeviceProfile(Base):

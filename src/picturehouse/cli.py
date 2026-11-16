@@ -55,6 +55,10 @@ profile_app = typer.Typer(
     help="Profiles: who's watching, child profiles and the exit code.", no_args_is_help=True
 )
 app.add_typer(profile_app, name="profile")
+kids_app = typer.Typer(
+    help="Titles outside the kids libraries that child profiles may see.", no_args_is_help=True
+)
+app.add_typer(kids_app, name="kids")
 drives_app = typer.Typer(
     help="Hard drives: put idle USB drives to sleep (Linux NAS boxes).", no_args_is_help=True
 )
@@ -426,6 +430,25 @@ def library_kids(
                "or change it live in Library -> Profiles)")  # fmt: skip
 
 
+@library_app.command("hide")
+@handles_errors
+def library_hide(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Library name")],
+    profiles: Annotated[
+        list[str] | None,
+        typer.Argument(help="Profiles (names or ids) that shouldn't see it; none: shown to all"),
+    ] = None,
+) -> None:
+    """Hide a library from some profiles, e.g. the kids' folders from yours."""
+    store = _profiles(ctx.obj)
+    ids = [store.find(p).id for p in profiles or []]
+    store.set_hidden(name, ids)
+    names = [store.get(i).name for i in ids]
+    typer.echo(f"{name}: hidden from {', '.join(names)}" if names
+               else f"{name}: shown to every profile")  # fmt: skip
+
+
 def _profiles(st: AppState):
     from picturehouse.profiles import ProfileStore
 
@@ -445,7 +468,10 @@ def profile_list(ctx: typer.Context) -> None:
         extra = "  (devices not set use this)" if p.id == 1 else ""
         typer.echo(f"{p.id:>3}  {p.name:<20} {kind:<6} {', '.join(on) or '-'}{extra}")
     kids = [r.name for r in st.load().libraries if r.kids]
-    typer.echo(f"\nkids libraries: {', '.join(kids) or 'none (child profiles see nothing)'}")
+    typer.echo(f"\nkids libraries: {', '.join(kids) or 'none'}"
+               "  (plus approved titles: picturehouse kids list)")  # fmt: skip
+    for lib, ids in sorted(store.hidden_from().items()):
+        typer.echo(f"{lib}: hidden from {', '.join(store.get(i).name for i in ids)}")
     typer.echo(f"exit code: {'set' if store.code_set else 'not set'}")
 
 
@@ -1230,3 +1256,79 @@ def run() -> None:
         if reconfigure:
             reconfigure(errors="backslashreplace")
     app()
+
+
+def _pick_title(ctx: typer.Context, title: str, item_id: int | None):
+    from picturehouse.profiles import find_titles
+
+    db = ctx.obj.services().db
+    found = find_titles(db, title)
+    if item_id is not None:
+        found = [t for t in found if t.item_id == item_id]
+        if not found:
+            raise PictureHouseError(f"no film called {title!r} with id {item_id}")
+    if not found:
+        raise PictureHouseError(f"no film or series called {title!r}",
+                                hint="use the title as PictureHouse shows it")  # fmt: skip
+    if len(found) > 1:
+        lines = "\n".join(f"  {t.kind:<10} {t.label}" + (f"  --id {t.item_id}" if t.item_id else "")
+                          for t in found)  # fmt: skip
+        raise PictureHouseError(f"{len(found)} titles called {title!r}:\n{lines}",
+                                hint="add --id for a film; a series is matched by name")  # fmt: skip
+    return db, found[0]
+
+
+def _set_approval(ctx: typer.Context, title: str, item_id: int | None, on: bool) -> None:
+    from picturehouse.profiles import approve_item, approve_show
+
+    db, t = _pick_title(ctx, title, item_id)
+    if t.item_id is not None:
+        approve_item(db, t.item_id, on)
+    else:
+        approve_show(db, list(t.parsed_shows), on)
+    what = "series" if t.kind == "show" else t.kind.replace("_", " ")
+    if on:
+        note = " (it's in a kids library anyway)" if t.kids_library else ""
+        typer.echo(f"child profiles can see the {what} {t.label}{note}")
+    else:
+        note = " (still visible: it's in a kids library)" if t.kids_library else ""
+        typer.echo(f"{t.label}: no longer approved for child profiles{note}")
+
+
+@kids_app.command("allow")
+@handles_errors
+def kids_allow(
+    ctx: typer.Context,
+    title: Annotated[str, typer.Argument(help='A film ("Up" or "Up (2009)") or a series')],
+    item_id: Annotated[int | None, typer.Option("--id", help="Which film, if several")] = None,
+) -> None:
+    """Let child profiles see a film or a whole series outside the kids libraries."""
+    _set_approval(ctx, title, item_id, True)
+
+
+@kids_app.command("remove")
+@handles_errors
+def kids_remove(
+    ctx: typer.Context,
+    title: Annotated[str, typer.Argument(help="A film or a series")],
+    item_id: Annotated[int | None, typer.Option("--id", help="Which film, if several")] = None,
+) -> None:
+    """Take back an approval."""
+    _set_approval(ctx, title, item_id, False)
+
+
+@kids_app.command("list")
+@handles_errors
+def kids_list(ctx: typer.Context) -> None:
+    """Titles approved for child profiles (besides the kids libraries)."""
+    from picturehouse.profiles import approved_titles
+
+    st: AppState = ctx.obj
+    rows = approved_titles(st.services().db)
+    kids = [r.name for r in st.load().libraries if r.kids]
+    typer.echo(f"kids libraries: {', '.join(kids) or 'none'}")
+    if not rows:
+        typer.echo("no other titles approved; add one with `picturehouse kids allow TITLE`")
+    for kind, label, item_id in rows:
+        typer.echo(f"  {('series' if kind == 'show' else kind):<10} {label}"
+                   + (f"  (id {item_id})" if item_id else ""))  # fmt: skip

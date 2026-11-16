@@ -604,6 +604,11 @@ body.phv-open { overflow: hidden; }
 .profiles td .pill { margin-left: 6px; }
 .kidslibs { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 4px 0 10px; }
 .kidslibs label { display: flex; align-items: center; gap: 8px; }
+.kidsline { margin-top: 10px; }
+label.kidsline { display: flex; align-items: flex-start; min-height: 0; color: var(--fg); }
+label.kidsline input { flex: none; margin-top: 1px; }
+.hidegrid th:not(:first-child), .hidegrid td:not(:first-child) { text-align: center; }
+.hidegrid input { width: 18px; height: 18px; accent-color: var(--accent); }
 .check { display: flex; align-items: center; gap: 8px; align-self: end; min-height: 44px; }
 .kidslibs input, .check input { width: 18px; height: 18px; accent-color: var(--accent); }
 .codeform { display: grid; gap: 12px; max-width: 340px; }

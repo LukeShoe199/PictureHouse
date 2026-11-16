@@ -12,6 +12,7 @@ from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session, object_session
 
 from picturehouse.db.models import (
+    KidsShow,
     LibraryRootRow,
     MediaItem,
     PlaybackState,
@@ -38,12 +39,21 @@ def decode_key(key: str) -> list[str]:
 
 
 def in_scope():
-    """Libraries this request may see: configured ones, and for a child
-    profile only kids libraries (see picturehouse.profiles). Every query that
-    lists or finds items joins LibraryRootRow and uses this."""
-    if SCOPE.get().kids_only:
-        return and_(LibraryRootRow.configured, LibraryRootRow.kids)
-    return LibraryRootRow.configured
+    """Items this request may see: from configured libraries the profile
+    hasn't hidden, and for a child profile only kids libraries plus approved
+    titles (see picturehouse.profiles). Every query that lists or finds items
+    joins LibraryRootRow to MediaItem and uses this."""
+    scope = SCOPE.get()
+    conds = [LibraryRootRow.configured]
+    if scope.hidden:
+        conds.append(LibraryRootRow.id.not_in(scope.hidden))
+    if scope.kids_only:
+        conds.append(or_(
+            LibraryRootRow.kids,
+            MediaItem.kids_ok,
+            MediaItem.parsed_show.in_(select(KidsShow.parsed_show)),
+        ))  # fmt: skip
+    return and_(*conds)
 
 
 def visible() -> Select:
@@ -177,6 +187,7 @@ def item_json(i: MediaItem, prog: PlaybackState | None = None) -> dict:
         "certification": i.certification,
         "rating": i.rating,
         "art": art_urls(i),
+        "kids_ok": i.kids_ok,
         "progress": {"position": prog.position, "completed": prog.completed} if prog else None,
     }
 
@@ -411,7 +422,7 @@ def album_photos(s: Session, name: str) -> list[MediaItem]:
 # libraries are merged. Built from paths only, cached until the library changes.
 
 LOOSE = "Other tracks"
-_tree_cache: dict[bool, dict] = {}  # per scope (kids only or not): {"stamp", "tree"}
+_tree_cache: dict[tuple, dict] = {}  # per scope (kids only, hidden): {"stamp", "tree"}
 
 
 def _music_tree(s: Session) -> dict:
@@ -419,7 +430,8 @@ def _music_tree(s: Session) -> dict:
     stamp = s.execute(
         q.with_only_columns(func.count(MediaItem.id), func.max(MediaItem.updated_at))
     ).one()
-    cache = _tree_cache.setdefault(SCOPE.get().kids_only, {"stamp": None, "tree": None})
+    scope = SCOPE.get()
+    cache = _tree_cache.setdefault((scope.kids_only, scope.hidden), {"stamp": None, "tree": None})
     if cache["stamp"] == tuple(stamp):
         return cache["tree"]
     rows = s.execute(q.with_only_columns(MediaItem.id, MediaItem.rel_path, MediaItem.year,

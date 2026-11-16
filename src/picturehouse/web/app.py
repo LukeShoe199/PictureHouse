@@ -48,7 +48,14 @@ from picturehouse.library.roots import add_root, remove_root, set_config_values,
 from picturehouse.log import LOG_FILE_NAME
 from picturehouse.metadata.api_client import MetadataApiError
 from picturehouse.paths import long_path, resolve_in_root
-from picturehouse.profiles import SCOPE, ProfileError, ProfileStore
+from picturehouse.profiles import (
+    SCOPE,
+    ProfileError,
+    ProfileStore,
+    approve_item,
+    approve_show,
+    approved_shows,
+)
 from picturehouse.services import Services
 from picturehouse.streaming import hwaccel, images, procs
 from picturehouse.streaming import levels as levels_mod
@@ -160,7 +167,12 @@ class DeviceProfileSetting(BaseModel):
 
 
 class LibraryEdit(BaseModel):
-    kids: bool
+    kids: bool | None = None
+    hidden_from: list[int] | None = None  # profile ids that don't see it
+
+
+class KidsApproval(BaseModel):
+    approved: bool
 
 
 class AdminLogin(BaseModel):
@@ -362,8 +374,11 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
 
     def get_item(s, item_id: int) -> MediaItem:
         item = s.get(MediaItem, item_id)
-        if item is None or (SCOPE.get().kids_only and not item.root.kids):
-            raise HTTPException(404, "no such item")  # a child profile can't see it either
+        scope = SCOPE.get()
+        if item is None or ((scope.kids_only or scope.hidden) and s.scalar(
+                select(MediaItem.id).join(LibraryRootRow)
+                .where(MediaItem.id == item_id, Q.in_scope())) is None):  # fmt: skip
+            raise HTTPException(404, "no such item")  # out of this profile's reach either
         return item
 
     def item_path(item: MediaItem) -> Path:
@@ -465,6 +480,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
                 raise HTTPException(404, "no such show")
             eps = Q.show_episodes(s, parts[0])
             ej = Q.items_json(s, eps)
+            in_kids_library = bool(eps) and all(e.root.kids for e in eps)
         seasons: dict[int, list] = {}
         for e in ej:
             seasons.setdefault(e["season"] if e["season"] is not None else -1, []).append(e)
@@ -475,7 +491,10 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             start = (watched[-1] + 1) if watched else 0
             regular = [e for e in ej[start:] if (e["season"] or 0) > 0] or ej[start:]
             next_up = regular[0] if regular else (ej[0] if ej else None)
+        parsed = set(parsed_of(parts[0]))
         return {**Q.strip_private(rows)[0],
+                "kids_ok": bool(parsed) and parsed <= approved_shows(svc.db),
+                "kids_library": in_kids_library,
                 "season_list": [{"season": n, "episodes": seasons[n]} for n in order],
                 "next_up": next_up}  # fmt: skip
 
@@ -602,7 +621,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             } for st in i.streams if not st.attached_pic and st.type in ("video", "audio", "subtitle")]  # fmt: skip
             b, d = decide_browser(i), decide_dlna(i)
             data.update({
-                "library": i.root.name, "file": i.rel_path, "size": i.size,
+                "library": i.root.name, "kids_library": i.root.kids, "file": i.rel_path, "size": i.size,
                 "container": i.container, "bitrate": i.bitrate,
                 "video": {"codec": i.vcodec, "profile": i.vprofile, "width": i.width,
                           "height": i.height, "pix_fmt": i.pix_fmt, "fps": i.fps}
@@ -931,6 +950,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
 
     @api.get("/libraries")
     def libraries():
+        hidden = profiles.hidden_from()
         with svc.db.session() as s:
             rows = s.execute(
                 select(LibraryRootRow, func.count(MediaItem.id), func.sum(MediaItem.size))
@@ -940,7 +960,8 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
                 .group_by(LibraryRootRow.id).order_by(LibraryRootRow.name)
             ).all()  # fmt: skip
         return {"libraries": [
-            {"name": r.name, "path": r.path, "kind": r.kind, "kids": r.kids, "available": r.available,
+            {"name": r.name, "path": r.path, "kind": r.kind, "kids": r.kids,
+             "hidden_from": hidden.get(r.name, []), "available": r.available,
              "unavailable_since": Q.iso(r.unavailable_since), "items": n, "bytes": b or 0,
              "last_scan_at": Q.iso(r.last_scan_at)}
             for r, n, b in rows]}  # fmt: skip
@@ -957,10 +978,16 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
 
     @api.put("/libraries/{name}")
     def edit_library(name: str, body: LibraryEdit):
-        """Mark a library as for children (child profiles see only these)."""
+        """Mark a library as for children (child profiles see only these, plus
+        approved titles), and/or set which profiles it's hidden from."""
         try:
-            set_root_kids(svc.config_file, name, body.kids)
-            svc.reload_settings()
+            if body.kids is not None:
+                set_root_kids(svc.config_file, name, body.kids)
+                svc.reload_settings()
+            if body.hidden_from is not None:
+                profiles.set_hidden(name, body.hidden_from)
+        except ProfileError as e:
+            raise HTTPException(e.status, e.message) from e
         except PictureHouseError as e:
             raise HTTPException(404, e.message) from e
         return next(x for x in libraries()["libraries"] if x["name"].casefold() == name.casefold())
@@ -1062,12 +1089,41 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
         parts = Q.decode_key(key)
         if len(parts) != 1:
             raise HTTPException(404, "no such show")
-        with svc.db.session() as s:
-            parsed = sorted({p for p in s.scalars(select(MediaItem.parsed_show).where(
-                MediaItem.show == parts[0], MediaItem.kind == "episode")) if p})  # fmt: skip
+        parsed = parsed_of(parts[0])
         if not parsed:
             raise HTTPException(404, "no such show")
         return parts[0], parsed
+
+    def parsed_of(show: str) -> list[str]:
+        with svc.db.session() as s:
+            return sorted({p for p in s.scalars(select(MediaItem.parsed_show).where(
+                MediaItem.show == show, MediaItem.kind == "episode")) if p})  # fmt: skip
+
+    def not_from_child() -> None:
+        # Admin-only anyway (access.py); this also stops a child device on the PC.
+        if SCOPE.get().kids_only:
+            raise HTTPException(403, "a child profile can't change what children may see")
+
+    @api.put("/items/{item_id}/kids")
+    def approve_item_route(item_id: int, body: KidsApproval):
+        """Let child profiles see this film (or other single item) although
+        it isn't in a kids library."""
+        not_from_child()
+        try:
+            approve_item(svc.db, item_id, body.approved)
+        except ProfileError as e:
+            raise HTTPException(e.status, e.message) from e
+        log.info("kids approval", extra={"item": item_id, "approved": body.approved})
+        return item_detail(item_id)
+
+    @api.put("/shows/{key}/kids")
+    def approve_show_route(key: str, body: KidsApproval):
+        """Let child profiles see this whole series, episodes added later too."""
+        not_from_child()
+        title, parsed = show_target(key)
+        approve_show(svc.db, parsed, body.approved)
+        log.info("kids approval", extra={"show": title, "approved": body.approved})
+        return {"key": key, "kids_ok": body.approved}
 
     @api.get("/metadata")
     def get_metadata_state():

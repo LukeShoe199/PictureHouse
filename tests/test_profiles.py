@@ -224,3 +224,152 @@ def test_lite_profile_page(house):
     r = kid.post("/lite/profiles", data={"id": "1", "code": CODE}, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/lite/"
     assert store.for_device(addr).id == 1
+
+
+# ---------------------------------------------------------------- approvals
+# A child sees the kids libraries plus titles approved one by one, so a film
+# both grown-ups and children watch needn't be copied into the kids folder.
+
+
+def test_an_approved_film_reaches_a_child_and_nothing_else_does(house):
+    pc, kid = house["pc"], device(house["app"], KID)
+    films = pc.get("/api/films").json()["items"]
+    film, other = films[0]["id"], films[1]["id"]
+    assert pc.get(f"/api/items/{film}").json()["kids_ok"] is False
+    r = pc.put(f"/api/items/{film}/kids", json={"approved": True})
+    try:
+        assert r.status_code == 200 and r.json()["kids_ok"] is True
+        assert r.json()["kids_library"] is False
+        assert ids(kid.get("/api/films").json()["items"]) == {film}
+        assert kid.get(f"/api/items/{film}").status_code == 200
+        assert kid.get(f"/api/items/{film}/play").status_code == 200
+        assert kid.get(f"/api/items/{other}").status_code == 404
+        assert kid.get("/api/status").json()["counts"]["films"] == 1
+        assert kid.get(f"/lite/item/{film}").status_code == 200
+    finally:
+        pc.put(f"/api/items/{film}/kids", json={"approved": False})
+    assert kid.get("/api/films").json()["total"] == 0
+    assert kid.get(f"/api/items/{film}").status_code == 404
+
+
+def test_an_approved_series_reaches_a_child_with_every_episode(house):
+    pc, kid = house["pc"], device(house["app"], KID)
+    assert pc.put("/api/libraries/TV", json={"kids": False}).status_code == 200
+    try:
+        assert kid.get("/api/shows").json()["shows"] == []
+        show = pc.get("/api/shows").json()["shows"][0]
+        detail = pc.get(f"/api/shows/{show['key']}").json()
+        assert detail["kids_ok"] is False and detail["kids_library"] is False
+        ep = detail["season_list"][0]["episodes"][0]["id"]
+        # An episode alone can't be approved: the series is, whole.
+        assert pc.put(f"/api/items/{ep}/kids", json={"approved": True}).status_code == 400
+        r = pc.put(f"/api/shows/{show['key']}/kids", json={"approved": True})
+        assert r.status_code == 200 and r.json()["kids_ok"] is True
+        assert [s["title"] for s in kid.get("/api/shows").json()["shows"]] == [show["title"]]
+        mine = kid.get(f"/api/shows/{show['key']}").json()
+        assert mine["episodes"] == show["episodes"] and mine["kids_ok"] is True
+        assert kid.get(f"/api/items/{ep}").status_code == 200
+        assert kid.get("/api/films").json()["total"] == 0
+        pc.put(f"/api/shows/{show['key']}/kids", json={"approved": False})
+        assert kid.get("/api/shows").json()["shows"] == []
+        assert kid.get(f"/api/items/{ep}").status_code == 404
+    finally:
+        pc.put("/api/libraries/TV", json={"kids": True})
+
+
+def test_a_series_approval_covers_episodes_found_later(tmp_path, media_library):
+    from picturehouse.db.models import MediaItem
+    from picturehouse.profiles import Scope, approve_show
+    from picturehouse.web import queries as Q
+
+    svc = make_services(media_library, tmp_path / "data")
+    try:
+        svc.scanner.scan()
+        with svc.db.session() as s:
+            ep = s.scalars(Q.visible().where(MediaItem.kind == "episode")).first()
+            parsed, show, root_id = ep.parsed_show, ep.show, ep.root_id
+        approve_show(svc.db, [parsed])
+        with svc.db.session() as s:  # a new episode of that series turns up
+            s.add(MediaItem(root_id=root_id, rel_path="new/S09E01.mkv", size=1, mtime_ns=1,
+                            media_type="video", kind="episode", title="New", show=show,
+                            parsed_show=parsed, season=9, episode=1, probe_ok=True))  # fmt: skip
+        token = SCOPE.set(Scope(profile_id=2, kids_only=True))
+        try:
+            with svc.db.session() as s:
+                titles = set(s.scalars(Q.visible().with_only_columns(MediaItem.title)))
+        finally:
+            SCOPE.reset(token)
+        assert "New" in titles
+    finally:
+        svc.close()
+
+
+def test_only_an_adult_admin_can_approve(media_library, tmp_path):
+    svc = make_services(media_library, tmp_path / "data")
+    try:
+        app = create_app(svc)
+        store = app.state.profiles
+        store.set_code(CODE)
+        store.assign("127.0.0.1", store.add("Sam", child=True).id)
+        with TestClient(app, **LOCAL) as pc:  # a child profile, even on the PC itself
+            assert pc.put("/api/items/1/kids", json={"approved": True}).status_code == 403
+            assert pc.put("/api/shows/eA/kids", json={"approved": True}).status_code == 403
+        other = device(app, "192.168.1.81")  # an adult device without the admin PIN
+        assert other.put("/api/items/1/kids", json={"approved": True}).status_code == 403
+    finally:
+        svc.close()
+
+
+def test_a_library_can_be_hidden_from_some_profiles(house):
+    """The kids' folders needn't clutter the grown-ups' profile, while the
+    child still sees them."""
+    pc, kid = house["pc"], device(house["app"], KID)
+    show = pc.get("/api/shows").json()["shows"][0]
+    ep = pc.get(f"/api/shows/{show['key']}").json()["season_list"][0]["episodes"][0]["id"]
+    r = pc.put("/api/libraries/TV", json={"hidden_from": [1]})
+    try:
+        assert r.status_code == 200 and r.json()["hidden_from"] == [1] and r.json()["kids"] is True
+        assert pc.get("/api/shows").json()["shows"] == []
+        assert pc.get("/api/status").json()["counts"]["episodes"] == 0
+        assert pc.get(f"/api/items/{ep}").status_code == 404
+        assert pc.get("/api/films").json()["total"] > 0  # only that library
+        assert kid.get("/api/status").json()["counts"]["episodes"] == 6  # the child still sees it
+        lib = next(x for x in pc.get("/api/libraries").json()["libraries"] if x["name"] == "TV")
+        assert lib["hidden_from"] == [1]
+        assert pc.put("/api/libraries/TV", json={"hidden_from": [99]}).status_code == 404
+    finally:
+        assert pc.put("/api/libraries/TV", json={"hidden_from": []}).json()["hidden_from"] == []
+    assert pc.get("/api/status").json()["counts"]["episodes"] == 6
+
+
+def test_cli_approvals_and_hiding(tmp_path, media_library):
+    from sqlalchemy import select
+
+    from picturehouse.db.models import MediaItem
+
+    data, run = tmp_path / "data", CliRunner()
+    svc = make_services(media_library, data)
+    svc.scanner.scan()
+    with svc.db.session() as s:
+        film = s.scalars(select(MediaItem).where(MediaItem.kind == "film")).first().title
+        show = s.scalars(select(MediaItem).where(MediaItem.kind == "episode")).first().show
+    svc.close()
+
+    def cli(*args, **kw):
+        return run.invoke(cli_app, ["--data-dir", str(data), *args], **kw)
+
+    r = cli("kids", "allow", film)
+    assert r.exit_code == 0 and "child profiles can see the film" in r.output, r.output
+    assert cli("kids", "allow", show).exit_code == 0
+    out = cli("kids", "list").output
+    assert film in out and show in out and "series" in out
+    assert cli("kids", "allow", "No Such Title").exit_code != 0
+    assert cli("kids", "remove", film).exit_code == 0
+    assert film not in cli("kids", "list").output
+    assert cli("profile", "exit-code", input=f"{CODE}\n{CODE}\n").exit_code == 0
+    assert cli("profile", "add", "Sam", "--child").exit_code == 0
+    r = cli("library", "hide", "TV", "Main")
+    assert r.exit_code == 0 and "hidden from Main" in r.output, r.output
+    assert "TV: hidden from Main" in cli("profile", "list").output
+    assert "shown to every profile" in cli("library", "hide", "TV").output
+    assert cli("library", "hide", "Nope", "Main").exit_code != 0

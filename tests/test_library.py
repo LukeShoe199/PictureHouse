@@ -326,5 +326,9 @@ def test_every_migration_keeps_child_rows(tmp_path):
         # 0005: progress so far belongs to the main profile
         assert c.execute("SELECT profile_id FROM playback_state").fetchall() == [(1,)]
         assert c.execute("SELECT id, name, child FROM profile").fetchall() == [(1, "Main", 0)]
+        # 0006: nothing approved for children yet, nothing hidden
+        assert c.execute("SELECT kids_ok FROM media_item").fetchall() == [(0,)]
+        assert c.execute("SELECT count(*) FROM kids_show").fetchone() == (0,)
+        assert c.execute("SELECT count(*) FROM hidden_library").fetchone() == (0,)
         assert c.execute("SELECT mtime_ns, match_status, color_transfer FROM media_item"
                          ).fetchone() == (0, "matched", None)  # fmt: skip

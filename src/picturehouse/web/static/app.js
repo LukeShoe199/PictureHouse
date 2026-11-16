@@ -373,6 +373,17 @@ function matchLine(md, kind, t) {
     + (md && md.locked && md.locked.length ? `<button class="link${confirming ? ' danger' : ''}" data-nav data-act="unlock" data-t="${t.editType || t.type}" data-id="${esc(t.editId != null ? t.editId : t.id)}">${confirming ? 'Confirm: undo my changes' : 'Undo my changes'}</button>` : '') : '';
   return `<div class="matchline">${matchPill(md, kind)}${links}</div>`;
 }
+/* Child profiles see the kids libraries plus titles approved here (a series
+   whole, episodes added later too). Shown to an admin on an adult profile,
+   once there is a child profile to approve things for. */
+function kidsLine(type, id, ok, inLib) {
+  const p = S.profiles;
+  if (!isAdmin() || !p || !p.current || p.current.child || !p.profiles.some(x => x.child)) return '';
+  const what = type === 'show' ? 'this series' : 'this';
+  if (inLib) return `<p class="note kidsline">In a kids library, so child profiles can watch ${what}.</p>`;
+  return `<label class="check kidsline"><input type="checkbox" data-nav data-kidsok="${type}" data-id="${esc(id)}"${ok ? ' checked' : ''}>
+    Child profiles can watch ${what}${type === 'show' ? ' (every episode, including ones added later)' : ''}</label>`;
+}
 const TARGETS = new Map(); // "item:12" / "show:key" -> { type, id, title, year, cands } for the fix/edit sheets
 const regTarget = t => { TARGETS.set(t.type + ':' + t.id, t); return t; };
 
@@ -566,6 +577,7 @@ VIEWS.item = {
           ${it.overview ? `<p class="d-syn">${esc(it.overview)}</p>` : ''}
           ${isTrack ? '' : creditsHTML(md, isEp)}
           ${matchHTML}
+          ${isEp || isTrack ? '' : kidsLine('item', String(it.id), it.kids_ok, it.kids_library)}
         </div>
       </div>${panels}`;
   }
@@ -618,6 +630,7 @@ VIEWS.show = {
           ${creditsHTML(sh.metadata, true)}
           ${matchLine(sh.metadata, 'show', regTarget({ type: 'show', id: sh.key, title: sh.title, year: sh.year, overview: sh.overview, genres: sh.genres,
             certification: sh.certification, cands: sh.metadata && sh.metadata.candidates, editType: 'show', editId: sh.key }))}
+          ${kidsLine('show', sh.key, sh.kids_ok, sh.kids_library)}
         </div>
       </div>
       ${list.length > 1 ? `<div class="seasons">${list.map(s => `<button class="chip ${cur && s.season === cur.season ? 'on' : ''}" data-nav data-season="${esc(s.season)}">${esc(seasonName(s.season))}</button>`).join('')}</div>` : '<div class="seasons"></div>'}
@@ -852,7 +865,7 @@ function profilesHTML(p, admin, libs) {
   if (!p || p._err) return `<div class="panel"><p class="note">Profiles couldn't be loaded${p && p._err ? `: ${esc(p._err)}` : ''}.</p></div>`;
   const L = S.lib;
   const kids = libs.filter(l => l.kids).map(l => l.name);
-  const intro = `<p class="note">Each device uses one profile (pick it with the button at the top). A <b>child</b> profile only sees the libraries ticked below${kids.length ? '' : ' (none yet, so it sees nothing)'}; leaving it needs the exit code. Each profile has its own Continue watching. TVs browsing over DLNA see everything.</p>`;
+  const intro = `<p class="note">Each device uses one profile (pick it with the button at the top). A <b>child</b> profile only sees the kids libraries ticked below and titles you approve${kids.length ? '' : ' (no kids libraries yet)'}; leaving it needs the exit code. Each profile has its own Continue watching. TVs browsing over DLNA see everything.</p>`;
   if (!admin) {
     return `<div class="panel">${intro}<ul class="addrs">${p.profiles.map(x => `<li>${esc(x.name)}${x.child ? ' (child)' : ''}</li>`).join('')}</ul>
       <p class="note">Profiles are managed on the PC running PictureHouse, or here after entering the admin PIN.</p></div>`;
@@ -871,6 +884,11 @@ function profilesHTML(p, admin, libs) {
   const kidsBoxes = libs.length
     ? `<div class="kidslibs">${libs.map(l => `<label><input type="checkbox" data-nav data-kidslib="${esc(l.name)}"${l.kids ? ' checked' : ''}> ${esc(l.name)}</label>`).join('')}</div>`
     : '<p class="note">Add a folder first.</p>';
+  const hideGrid = libs.length ? `<div class="panel"><h3>Hide libraries</h3>
+      <p class="note">A hidden library doesn't appear anywhere on that profile: lists, search, Continue watching. Handy for keeping the kids' folders off your own profile. It's tidiness, not a lock.</p>
+      <div class="tablewrap"><table class="hidegrid"><thead><tr><th>Library</th>${p.profiles.map(x => `<th>Hide from ${esc(x.name)}</th>`).join('')}</tr></thead><tbody>
+      ${libs.map(l => `<tr><td>${esc(l.name)}${l.kids ? ' <span class="pill quiet">Kids</span>' : ''}</td>${p.profiles.map(x => `<td><input type="checkbox" data-nav data-hidelib="${esc(l.name)}" data-prof="${x.id}" aria-label="Hide ${esc(l.name)} from ${esc(x.name)}"${(l.hidden_from || []).includes(x.id) ? ' checked' : ''}></td>`).join('')}</tr>`).join('')}
+      </tbody></table></div></div>` : '';
   return `<div class="panel">${intro}
       <div class="tablewrap profiles"><table><thead><tr><th>Profile</th><th>Kind</th><th><span hidden>Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>
       <form class="form" id="profadd" novalidate autocomplete="off" style="margin-top:12px">
@@ -879,13 +897,13 @@ function profilesHTML(p, admin, libs) {
         <div class="formbtns"><button type="submit" class="btn small" data-nav>Add profile</button></div></form>
       <p class="formerr" id="proferr" role="alert" hidden></p></div>
     <div class="two">
-      <div class="panel"><h3>Kids libraries</h3><p class="note">Child profiles see only these.</p>${kidsBoxes}</div>
+      <div class="panel"><h3>Kids libraries</h3><p class="note">Child profiles see only these, plus films and series you approve on their own pages (“Child profiles can watch this”).</p>${kidsBoxes}</div>
       <form class="panel" id="exitform" novalidate autocomplete="off"><h3>Exit code</h3>
         <p class="note">${p.exit_code_set ? 'Set. Asked for when leaving a child profile.' : 'Not set yet. Needed before any device can use a child profile.'} Separate from the admin PIN.</p>
         <label class="field">${p.exit_code_set ? 'New exit code' : 'Exit code'}<input name="code" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="12" autocomplete="new-password" placeholder="4 to 12 digits" data-nav></label>
         <div class="formbtns"><button type="submit" class="btn small" data-nav>${p.exit_code_set ? 'Change code' : 'Set code'}</button></div>
         <p class="formerr" id="exiterr" role="alert" hidden></p></form>
-    </div>`;
+    </div>${hideGrid}`;
 }
 async function profAct(name, btn) {
   const L = S.lib, id = +btn.dataset.id;
@@ -936,6 +954,20 @@ document.addEventListener('change', async e => {
   if (ds.kidslib) {
     try { await api(`/api/libraries/${enc(ds.kidslib)}`, { method: 'PUT', body: { kids: t.checked } }); toast(`${ds.kidslib}: ${t.checked ? 'child profiles can see it' : 'hidden from child profiles'}`); route({ keepScroll: true }); }
     catch (er) { t.checked = !t.checked; toast(er.message); }
+  } else if (ds.kidsok) {
+    try {
+      await api(`${tBase(ds.kidsok, ds.id)}/kids`, { method: 'PUT', body: { approved: t.checked } });
+      toast(t.checked ? 'Child profiles can watch it now' : 'Child profiles no longer see it');
+    } catch (er) { t.checked = !t.checked; toast(er.message); }
+  } else if (ds.hidelib) {
+    const boxes = [...document.querySelectorAll('[data-hidelib]')].filter(b => b.dataset.hidelib === ds.hidelib);
+    const ids = boxes.filter(b => b.checked).map(b => +b.dataset.prof);
+    const who = S.profiles && S.profiles.profiles.find(x => x.id === +ds.prof);
+    try {
+      await api(`/api/libraries/${enc(ds.hidelib)}`, { method: 'PUT', body: { hidden_from: ids } });
+      toast(`${ds.hidelib}: ${t.checked ? 'hidden from' : 'shown to'} ${who ? who.name : 'that profile'}`);
+      route({ keepScroll: true });
+    } catch (er) { t.checked = !t.checked; toast(er.message); }
   } else if (ds.devprof) {
     try { await api(`/api/devices/${enc(ds.devprof)}/profile`, { method: 'PUT', body: { profile_id: +t.value } }); toast(`${ds.devprof} now uses ${t.options[t.selectedIndex].text}`); loadProfiles(); }
     catch (er) { toast(er.message); route({ keepScroll: true }); }

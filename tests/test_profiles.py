@@ -390,3 +390,22 @@ def test_a_childrens_folder_is_added_as_one(house, tmp_path):
         assert "kids = true" in svc.config_file.read_text(encoding="utf-8")
     finally:
         assert pc.delete("/api/libraries/Kids Films").status_code == 204
+
+
+def test_an_approved_film_shows_even_if_its_folder_was_hidden_from_the_child(house):
+    """Bug: hiding the grown-ups' Films folder from the child (redundant, and
+    greyed out in the console) also blocked the films approved from it."""
+    pc, kid, sam = house["pc"], device(house["app"], KID), house["sam"].id
+    film = pc.get("/api/films").json()["items"][0]["id"]
+    assert pc.put("/api/libraries/Films", json={"hidden_from": [sam]}).status_code == 200
+    pc.put(f"/api/items/{film}/kids", json={"approved": True})
+    try:
+        assert ids(kid.get("/api/films").json()["items"]) == {film}
+        assert kid.get(f"/api/items/{film}").status_code == 200
+        # Hiding a children's folder from the child still works.
+        assert pc.put("/api/libraries/TV", json={"hidden_from": [sam]}).status_code == 200
+        assert kid.get("/api/status").json()["counts"]["episodes"] == 0
+    finally:
+        pc.put(f"/api/items/{film}/kids", json={"approved": False})
+        pc.put("/api/libraries/Films", json={"hidden_from": []})
+        pc.put("/api/libraries/TV", json={"hidden_from": []})

@@ -44,16 +44,18 @@ def in_scope():
     titles (see picturehouse.profiles). Every query that lists or finds items
     joins LibraryRootRow to MediaItem and uses this."""
     scope = SCOPE.get()
-    conds = [LibraryRootRow.configured]
-    if scope.hidden:
-        conds.append(LibraryRootRow.id.not_in(scope.hidden))
+    shown = LibraryRootRow.id.not_in(scope.hidden) if scope.hidden else None
     if scope.kids_only:
-        conds.append(or_(
-            LibraryRootRow.kids,
+        # Hiding only narrows the children's folders: an approved title always
+        # shows, whatever folder it's in (hiding the grown-ups' Films from a
+        # child once blocked the films approved from it).
+        kids_lib = LibraryRootRow.kids if shown is None else and_(LibraryRootRow.kids, shown)
+        return and_(LibraryRootRow.configured, or_(
+            kids_lib,
             MediaItem.kids_ok,
             MediaItem.parsed_show.in_(select(KidsShow.parsed_show)),
         ))  # fmt: skip
-    return and_(*conds)
+    return LibraryRootRow.configured if shown is None else and_(LibraryRootRow.configured, shown)
 
 
 def visible() -> Select:

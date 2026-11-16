@@ -141,7 +141,16 @@ def _apply_probe(item: MediaItem, probe: ProbeResult | None, root_kind: str) -> 
         if "year" not in locked:
             item.year = n.year
         item.show = n.show
-    item.season, item.episode, item.episode_end = n.season, n.episode, n.episode_end
+    numbers = (n.season, n.episode, n.episode_end)
+    if (
+        n.kind == "episode"
+        and item.match_status == "matched"
+        and numbers != (item.season, item.episode, item.episode_end)
+    ):
+        # Renamed, or numbered from the series start (matching maps that onto
+        # seasons): match again so the episode gets its details back.
+        item.match_status = "pending"
+    item.season, item.episode, item.episode_end = numbers
     item.artist, item.album_artist, item.album = n.artist, n.album_artist, n.album
     item.track_no, item.disc_no, item.recorded_at = n.track_no, n.disc_no, n.recorded_at
     if probe is None:

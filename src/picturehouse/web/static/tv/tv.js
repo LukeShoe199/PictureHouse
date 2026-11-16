@@ -416,7 +416,7 @@ var PAGES = {
           (nu2.progress && !nu2.progress.completed ? 'Resume ' : 'Play ') + esc(epCode(nu2)) + '</button></div>' : '') +
         '<div class="seasons">' + seasons.map(function (x, i) {
           return '<button class="f season' + (i === p.season ? ' cur' : '') + '" data-k="season' + i + '" data-season="' + i + '">' +
-            (x.season === 0 ? 'Specials' : x.season == null || x.season < 0 ? 'Other' : 'Season ' + x.season) + '</button>';
+            (x.season === 0 ? 'Specials' : x.season == null || x.season < 0 ? 'Episodes' : 'Season ' + x.season) + '</button>';
         }).join('') + '</div>' +
         '<div class="eps">' + s.episodes.map(function (e) {
           var pct = e.progress && !e.progress.completed && e.duration ? Math.min(100, e.progress.position / e.duration * 100) : 0;

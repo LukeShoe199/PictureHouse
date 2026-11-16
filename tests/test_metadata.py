@@ -171,6 +171,47 @@ def test_new_episode_reuses_show_match(env):
     assert "/search/tv" not in fake.calls
 
 
+def test_series_numbered_from_the_start(media_library, tmp_path, monkeypatch):
+    """ "Show - 004 - Title-110": the middle number counts from the first
+    episode and is mapped onto TMDb's seasons. Libraries scanned before the
+    parser knew this (Dragon Ball came out as S1 duplicates and a "Season -1")
+    are put right by the matcher-version retry, without a rescan."""
+    monkeypatch.setattr(api_client.time, "sleep", lambda s: None)
+    anime = tmp_path / "anime"
+    anime.mkdir()
+    for n, junk in ((2, 110), (4, 20), (5, 7)):  # junk numbers like the real files
+        (anime / f"Absolute Show - {n:03d} - Some Title-{junk}.mkv").write_bytes(b"x")
+    svc = make_services(media_library, tmp_path / "data",
+                        extra_toml=f"[[libraries]]\nname = 'Anime'\npath = '{anime}'\nkind = 'tv'\n")  # fmt: skip
+    fake = FakeTMDb()
+    client = TMDb("test-key", tmp_path / "tmdb-cache", transport=fake.transport())
+    state = tmp_path / "matcher-version"
+    try:
+        svc.scanner.scan(["Anime"])  # the files aren't real video: probing fails, names still count
+        assert _item(svc, rel_path="Absolute Show - 004 - Some Title-20.mkv").episode == 4
+
+        def numbers():
+            with svc.db.session() as s:
+                q = select(MediaItem).where(MediaItem.parsed_show == "Absolute Show")
+                return sorted((i.season, i.episode, i.episode_end, i.title) for i in s.scalars(q))
+
+        expected = [(1, 2, None, "Two"), (2, 1, None, "Four"), (2, 2, None, "Five")]
+        Matcher(svc.db, client, state_file=state).match()
+        assert numbers() == expected
+
+        # As an older version left it: guessit's numbers, matched to the wrong episodes.
+        with svc.db.session() as s:
+            for i in s.scalars(select(MediaItem).where(MediaItem.parsed_show == "Absolute Show")):
+                i.season, i.episode, i.episode_end, i.title = 1, 1, 10, "Wrong"
+        state.write_text("2")
+        Matcher(svc.db, client, state_file=state).match()
+        assert numbers() == expected
+        assert state.read_text() == "3"
+    finally:
+        client.close()
+        svc.close()
+
+
 def test_without_tmdb_key_nfo_still_applies(media_library, tmp_path):
     svc = make_services(media_library, tmp_path / "data")
     try:

@@ -281,7 +281,8 @@ def router(svc, api, profiles=None) -> APIRouter:
                      f"{e(season_ep(nxt))}</a></p>")  # fmt: skip
         for season in d["season_list"]:
             n = season["season"]
-            body += f"<h2>{'Specials' if n is None or n <= 0 else f'Season {n}'}</h2>"
+            label = "Episodes" if n is None or n == -1 else "Specials" if n == 0 else f"Season {n}"
+            body += f"<h2>{label}</h2>"
             body += grid([item_card(ep, shape="l") for ep in season["episodes"]])
         return render(d["title"], body, back=("TV", "/lite/tv"))
 

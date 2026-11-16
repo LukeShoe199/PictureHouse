@@ -204,6 +204,36 @@ def _is_season_dir(d: str) -> int | None:
     return 0 if _SPECIALS_DIR.match(d) else None
 
 
+# "Show - 123 - Title" (anime and fan rips): the number between the dashes is
+# the episode, counted from the start of the series when there's no season
+# folder. guessit misreads these: a stray number after the title
+# ("Title-110") becomes season 1 episode 10, or the end of a double episode.
+_ABSOLUTE_EP = re.compile(
+    r"^(?P<show>.+?)\s+-\s+(?P<ep>\d{1,4})(?:-(?P<end>\d{1,4}))?(?:\s+-\s+(?P<title>.*))?$"
+)
+# Names that say the season themselves: S01E05, 1x05.
+_EXPLICIT_SEASON = re.compile(r"(?:\bs\d{1,3}\s*e\d|\b\d{1,2}x\d{2,3}\b)", re.IGNORECASE)
+_TITLE_JUNK = re.compile(r"(?<=\S)-\d+$")  # "Battle Cry-30": a number glued on the end
+
+
+def _absolute(stem: str) -> tuple[str, int, int | None, str] | None:
+    """(show, episode, last episode, title) for a "Show - 123 - Title" name."""
+    if _EXPLICIT_SEASON.search(stem) or not (m := _ABSOLUTE_EP.match(stem.strip())):
+        return None
+    ep, end = int(m["ep"]), int(m["end"]) if m["end"] else None
+    if len(m["ep"]) == 4 and 1900 <= ep <= 2099:
+        return None  # "Show - 2019 - Title": a year, not an episode
+    if end is not None and end <= ep:
+        end = None
+    title = _TITLE_JUNK.sub("", (m["title"] or "").strip()).strip()
+    return m["show"].strip(), ep, end, title
+
+
+def looks_absolute(stem: str) -> bool:
+    """A "Show - 123 - Title" episode name (see ``_ABSOLUTE_EP``)."""
+    return _absolute(strip_category(stem)[1]) is not None
+
+
 def _episode(p: PurePosixPath, guess) -> Naming:
     dirs = list(p.parts[:-1])
     # The show is the nearest folder above any season folders, unless that's a
@@ -213,10 +243,22 @@ def _episode(p: PurePosixPath, guess) -> Naming:
         show_dir = strip_category(show_dir)[1]
         if show_dir.casefold() in _GENERIC_DIRS:
             show_dir = None
+    absolute = _absolute(strip_category(p.stem)[1])
     if show_dir:
         show, year = split_year(show_dir)
+    elif absolute:
+        show, year = split_year(absolute[0])
     else:
         show, year = str(guess.get("title") or p.stem), _int(guess.get("year"))
+    if absolute:
+        _, episode, episode_end, title = absolute
+        # A season folder makes the number count within that season; with
+        # none it counts from the start (matching maps it onto the seasons).
+        season = next((n for d in reversed(dirs) if (n := _is_season_dir(d)) is not None), None)
+        return Naming(
+            kind="episode", title=title or f"Episode {episode}", year=year, show=show,
+            season=season, episode=episode, episode_end=episode_end,
+        )  # fmt: skip
     season = _int(guess.get("season"))
     if season is None:
         season = next((n for d in reversed(dirs) if (n := _is_season_dir(d)) is not None), None)

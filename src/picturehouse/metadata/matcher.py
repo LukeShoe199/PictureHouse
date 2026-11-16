@@ -28,13 +28,13 @@ import threading
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from sqlalchemy import select
 
 from picturehouse.db import Database
 from picturehouse.db.models import MediaItem, ShowMeta, utcnow
-from picturehouse.library.naming import derive, sort_title
+from picturehouse.library.naming import derive, looks_absolute, sort_title
 from picturehouse.metadata import nfo as nfo_mod
 from picturehouse.metadata.omdb import OMDb, OMDbError, OMDbLimit, na, split_names, year_of
 from picturehouse.metadata.tmdb import TMDb, TMDbError, image_url
@@ -51,7 +51,8 @@ CLEAR_MARGIN = 0.2  # ...this far behind it
 POPULAR_RATIO = 4.0
 POPULAR_MIN = 200
 # Bump when matching improves: ambiguous/unmatched items are then retried once.
-MATCHER_VERSION = 2
+# 3: "Show - 123 - Title" episodes are re-read and numbered from the series start.
+MATCHER_VERSION = 3
 TMDB_VARIANTS = 4  # searches per title at most
 OMDB_VARIANTS = 2  # OMDb's free quota is 1,000 a day
 CANDIDATE_FLOOR = 0.45  # below this a result isn't worth showing as a candidate
@@ -418,6 +419,7 @@ class Matcher:
                 retry = self.online and self._matcher_improved()
                 if retry:
                     log.info("matcher improved: retrying ambiguous and unmatched items")
+                    self._reparse_episodes(libraries)
                 for item_id in self._film_ids(force, libraries, retry):
                     try:
                         summary.count(summary.films, self.match_film(item_id))
@@ -496,6 +498,33 @@ class Matcher:
                 if meta is None or force or meta.match_status == "pending" or pending_eps                         or unsettled:  # fmt: skip
                     out.append(n)
             return out
+
+    def _reparse_episodes(self, libraries: list[str] | None) -> None:
+        """Re-number "Show - 123 - Title" episodes scanned before the parser
+        understood them (scans skip unchanged files). Changed ones go back to
+        pending, so their show is filled in again."""
+        from picturehouse.db.models import LibraryRootRow
+
+        q = select(MediaItem).join(LibraryRootRow).where(MediaItem.kind == "episode")
+        if libraries:
+            q = q.where(LibraryRootRow.name.in_(libraries))
+        changed = 0
+        with self.db.session() as s:
+            for item in s.scalars(q):
+                if not looks_absolute(PurePosixPath(item.rel_path).stem):
+                    continue
+                n = derive(item.rel_path, item.root.kind, None)
+                if n.kind != "episode":
+                    continue
+                item.season, item.episode, item.episode_end = n.season, n.episode, n.episode_end
+                if (item.metadata_source or "file") == "file" and "title" not in _locked(item):
+                    item.title, item.sort_title = n.title, sort_title(n.title)
+                item.parsed_title = n.title
+                if item.match_status != "pending":
+                    item.match_status = "pending"
+                    changed += 1
+        if changed:
+            log.info("re-read %d episode file names (numbered from the series start)", changed)
 
     @staticmethod
     def _reparse(item: MediaItem) -> None:
@@ -823,6 +852,32 @@ class Matcher:
         log.info("show %r (OMDb): matched (%d episodes)", parsed_show, n)
         return "matched", n
 
+    def _number_from_start(self, tmdb_id: int, eps: list[MediaItem]) -> None:
+        """Episodes numbered from the start of the series (no season: "Dragon
+        Ball - 046") get TMDb's season and episode, counting through the
+        regular seasons in order (specials, season 0, aren't counted)."""
+        loose = [e for e in eps if e.season is None and e.episode is not None]
+        if not loose:
+            return
+        try:
+            seasons = self.tmdb.tv(tmdb_id).get("seasons") or []
+        except TMDbError as ex:
+            log.info("no TMDb season list for %s: %s", tmdb_id, ex)
+            return
+        order: list[tuple[int, int]] = []
+        for sd in sorted(seasons, key=lambda d: d.get("season_number") or 0):
+            n = sd.get("season_number") or 0
+            if n > 0:
+                order += [(n, i) for i in range(1, (sd.get("episode_count") or 0) + 1)]
+        for e in loose:
+            if 1 <= e.episode <= len(order):
+                end = e.episode_end
+                e.season, e.episode = order[e.episode - 1]
+                if end is not None:
+                    # A double episode stays one only within one season.
+                    last = order[end - 1] if end <= len(order) else None
+                    e.episode_end = last[1] if last and last[0] == e.season else None
+
     def _fill_episodes(self, meta: ShowMeta, eps: list[MediaItem], root: Path) -> int:
         seasons: dict[int, dict[int, dict]] = {}
         provider = "tmdb"
@@ -846,6 +901,7 @@ class Matcher:
                 except OMDbError as e:
                     log.info("no OMDb data for %s season %s: %s", meta.title, n, e)
         elif self.tmdb and meta.tmdb_id:
+            self._number_from_start(meta.tmdb_id, eps)
             for n in sorted({e.season for e in eps if e.season is not None}):
                 try:
                     data = self.tmdb.season(meta.tmdb_id, n)

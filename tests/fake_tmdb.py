@@ -65,15 +65,30 @@ SHOWS = {
         "genres": [],
     },
 }
+SHOWS[777] = {  # files numbered from the first episode ("Absolute Show - 004 - …")
+    "id": 777,
+    "name": "Absolute Show",
+    "first_air_date": "1986-02-26",
+    "overview": "Numbered from the start.",
+    "genres": [],
+    "seasons": [  # TMDb lists specials as season 0; they aren't counted
+        {"season_number": 0, "episode_count": 1},
+        {"season_number": 1, "episode_count": 3},
+        {"season_number": 2, "episode_count": 2},
+    ],
+}
 for sh in SHOWS.values():
     sh["credits"] = {"cast": [{"name": "Lead"}]}
     sh["content_ratings"] = {"results": [{"iso_3166_1": "GB", "rating": "15"}]}
-SHOW_SEARCH = {"another show": [SHOWS[555]]}
+SHOW_SEARCH = {"another show": [SHOWS[555]], "absolute show": [SHOWS[777]]}
 SEASONS = {
     (999002, 1): [(1, "Pilot (TMDb)"), (2, "The Second One (TMDb)")],
     (999002, 2): [(1, "Season Two Opener")],
     (999002, 0): [(1, "Behind the Scenes (TMDb)")],
     (555, 1): [(1, "Double Part 1"), (2, "Double Part 2"), (3, "Third")],
+    (777, 0): [(1, "A Special")],
+    (777, 1): [(1, "One"), (2, "Two"), (3, "Three")],
+    (777, 2): [(1, "Four"), (2, "Five")],
 }
 
 

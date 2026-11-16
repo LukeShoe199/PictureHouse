@@ -68,6 +68,41 @@ def test_derive_labelled_flat_folder(rel, expect):
     _check(rel, "mixed", expect)
 
 
+# "Show - 123 - Title": the middle number is the episode, counted from the
+# start of the series. Real Dragon Ball file names, each with a stray number
+# glued to the title that guessit read as S1E10, a double episode E10-E20, etc.
+@pytest.mark.parametrize(
+    ("rel", "expect"),
+    [
+        ("Dragonball - 01 - Secret Of The Dragonballs-1.mp4",
+         {"show": "Dragonball", "season": None, "episode": 1, "episode_end": None,
+          "title": "Secret Of The Dragonballs"}),
+        ("Dragonball - 10 - The Dragonballs Are Stolen-20.mp4",
+         {"season": None, "episode": 10, "episode_end": None}),
+        ("Dragonball - 46 - Bulmas Bad Day-100.mp4",
+         {"season": None, "episode": 46, "title": "Bulmas Bad Day"}),
+        ("Dragonball - 56 - Strange Visitor-110.mp4",
+         {"season": None, "episode": 56, "episode_end": None}),
+        ("Dragonball - 100 - The Spirit Cannon-10.mp4",
+         {"season": None, "episode": 100, "title": "The Spirit Cannon"}),
+        ("Dragonball - 47 - Kame House - Found-101.mp4",
+         {"episode": 47, "title": "Kame House - Found"}),
+        ("Dragonball - 39 - Mysterious Android No. 8-93.mp4",
+         {"episode": 39, "title": "Mysterious Android No. 8"}),
+        # A season folder: the number counts within that season.
+        ("Some Anime/Season 2/Some Anime - 05 - Title.mkv",
+         {"show": "Some Anime", "season": 2, "episode": 5}),
+        ("Some Anime - 1050.mkv", {"show": "Some Anime", "episode": 1050, "title": "Episode 1050"}),
+        ("Some Anime - 07-08 - Two Parter.mkv", {"episode": 7, "episode_end": 8}),
+        # Not this pattern: the name says the season, or the number is a year.
+        ("Test Show - S02E05 - Title-3.mkv", {"season": 2, "episode": 5}),
+        ("Test Show - 2x05 - Title.mkv", {"season": 2, "episode": 5}),
+    ],
+)  # fmt: skip
+def test_derive_numbered_from_series_start(rel, expect):
+    _check(rel, "tv", expect)
+
+
 def _check(rel, kind, expect):
     n = derive(rel, kind, None)
     for k, v in expect.items():

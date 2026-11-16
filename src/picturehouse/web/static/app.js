@@ -109,7 +109,8 @@ const epCode = it => {
   if (it.episode != null) parts.push('E' + it.episode + (it.episode_end != null && it.episode_end !== it.episode ? '–E' + it.episode_end : ''));
   return parts.join(' · ');
 };
-const seasonName = n => n == null ? 'Episodes' : n === 0 ? 'Specials' : `Season ${n}`;
+// The show API groups episodes with no season under -1.
+const seasonName = n => n == null || n === -1 ? 'Episodes' : n === 0 ? 'Specials' : `Season ${n}`;
 const qualityLabel = it => it.quality ? it.quality + (it.hdr ? ' HDR' : '') : (it.hdr ? 'HDR' : '');
 const resumable = it => !!(it && it.progress && it.progress.position > 0 && !it.progress.completed);
 const pctOf = it => it && it.progress && it.duration ? Math.min(100, Math.max(0, it.progress.position / it.duration * 100)) : 0;

@@ -2074,21 +2074,54 @@ function exitFs() {
 }
 async function toggleFullscreen() {
   if (fsElement()) { exitFs(); return; }
+  await enterFs(false);
+}
+// rotated: the phone was turned sideways (no orientation lock, so turning it
+// upright again can leave full screen; no messages if the browser refuses).
+async function enterFs(rotated) {
   const req = PL.requestFullscreen || PL.webkitRequestFullscreen;
   try {
     if (req) {
       await req.call(PL, { navigationUI: 'hide' });
-      // Phones: turn a landscape film sideways too (allowed only once full screen).
-      if (V.videoWidth > V.videoHeight && screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+      // Button on a phone: turn a landscape film sideways too (allowed only once full screen).
+      if (!rotated && V.videoWidth > V.videoHeight && screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+      return true;
     } else if (V.webkitEnterFullscreen) {
       V.webkitEnterFullscreen();  // iPhone: the video alone, in the system player
-    } else {
+      return true;
+    } else if (!rotated) {
       toast('This browser can\'t go full screen.');
     }
-  } catch (e) { toast('Full screen was blocked by the browser.'); }
+  } catch (e) { if (!rotated) toast('Full screen was blocked by the browser.'); }
+  return false;
 }
+
+/* Phones: turning the phone sideways while a landscape video is on screen goes
+   full screen without the button, and turning it upright again leaves full
+   screen (only if it went full screen that way). Chrome, and so the Android
+   app, accept a full-screen request made in the rotation's own event (Blink:
+   ScopedAllowFullscreen::kOrientationChange); where a
+   browser refuses (iPhone Safari wants a tap), nothing happens. */
+let rotatedFs = false;
+const isLandscape = () => (screen.orientation && screen.orientation.type
+  ? screen.orientation.type.startsWith('landscape') : Math.abs(window.orientation || 0) === 90);
+function onRotate() {
+  if (!matchMedia('(pointer: coarse)').matches) return;  // phones and tablets only
+  if (isLandscape()) {
+    if (!P || P.cast || PL.hidden || fsElement() || !PL.classList.contains('has-video') || V.videoWidth <= V.videoHeight) return;
+    enterFs(true).then(ok => { rotatedFs = ok; });
+  } else if (rotatedFs && fsElement() === PL) {
+    exitFs();
+  }
+}
+// screen.orientation's 'change' is the event Chrome lets request full screen
+// (not window 'orientationchange'); older Safari only has the window one.
+if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', onRotate);
+else window.addEventListener('orientationchange', onRotate);
+
 function fsChanged() {
   const on = fsElement() === PL;
+  if (!on) rotatedFs = false;
   PL.classList.toggle('fs', on);
   const b = $('#pfs');
   b.innerHTML = on ? FS_ICONS.on : FS_ICONS.off;

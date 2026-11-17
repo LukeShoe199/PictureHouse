@@ -336,6 +336,21 @@ def test_tv_app_finds_server_and_page(client):
     assert client.get("/static/tv/tv.js").status_code == 200
 
 
+def test_tv_app_can_tell_when_the_server_has_newer_files(tmp_path, monkeypatch):
+    """webOS keeps the app running in the background, so tv.js compares this
+    fingerprint when it comes back and reloads when the server's files changed."""
+    from picturehouse.web import app as web_app
+
+    for sub in ("tv", "shared"):
+        (tmp_path / sub).mkdir()
+        (tmp_path / sub / "a.js").write_text("one", encoding="utf-8")
+    monkeypatch.setattr(web_app, "STATIC_DIR", tmp_path)
+    before = web_app.ui_build()
+    assert before == web_app.ui_build()  # stable while nothing changes
+    (tmp_path / "tv" / "a.js").write_text("two!", encoding="utf-8")
+    assert web_app.ui_build() != before
+
+
 def test_tv_gets_originals_the_tv_can_play_else_hls(client):
     amelie = _film(client, "Amélie")  # H.264/AAC MP4
     d = client.get(f"/api/items/{amelie['id']}/play", params={"client": "tv"}).json()

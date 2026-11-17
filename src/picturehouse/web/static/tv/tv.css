@@ -227,3 +227,22 @@ h2 { font: 700 1.5rem/1.2 var(--display); margin: 2rem 0 1rem; color: var(--fg);
 .miniviz i { display: block; width: .42rem; height: 100%; margin: 0 .12rem; border-radius: .1rem; background: var(--accent);
   transform-origin: bottom; transform: scaleY(.2); transition: transform .08s linear; }
 
+
+/* ---------- Who's watching? (and the exit code) ---------- */
+.who { padding-top: 6rem; text-align: center; }
+.who h1 { font-size: 4rem; margin: 0 0 3rem; }
+.who .muted { font-size: 1.3rem; }
+.ptiles { justify-content: center; }
+.ptile { width: 13rem; margin: 0 1.5rem 1.5rem; padding: 1rem .5rem 1.2rem; border-radius: 1rem; text-align: center;
+  transition: transform .12s ease; }
+.ptile .pav { display: block; width: 9rem; height: 9rem; margin: 0 auto 1rem; border-radius: 50%; background: var(--accent);
+  color: var(--accent-ink); font: 800 4rem/9rem var(--display); }
+.ptile.child .pav { background: #5fc48b; }
+.ptile b { display: block; font-size: 1.5rem; }
+.ptile small { display: block; color: var(--muted); font-size: 1.05rem; min-height: 1.5rem; }
+.ptile.f.on { box-shadow: none; transform: scale(1.08); }
+.ptile.f.on .pav { box-shadow: 0 0 0 .3rem var(--fg); }
+.who .btn { margin: 0 .6rem; }
+.code-box { display: block; width: 20rem; margin: 2rem auto 1rem; padding: .9rem 1.2rem; background: var(--surface-2);
+  border-radius: .6rem; font-size: 2rem; text-align: center; letter-spacing: .4em; }
+.who .err { color: var(--bad); font-size: 1.2rem; margin: 0 0 1rem; }

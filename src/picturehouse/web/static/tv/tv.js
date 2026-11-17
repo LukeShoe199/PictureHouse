@@ -249,6 +249,7 @@ function go(name, arg, replaceAll) {
   render();
 }
 function back() {
+  if (cur() && cur().name === 'profiles' && cur().arg && cur().arg.start) { enterApp(); return; }  // keep the current profile
   if (stack.length > 1) {
     stack.pop(); render(); return;
   }
@@ -259,6 +260,7 @@ function back() {
 var renderToken = 0;
 function render() {
   var p = cur(), token = ++renderToken;
+  if (!P && !document.body.classList.contains('overlay')) $('#top').classList.toggle('hide', p.name === 'code' || (p.name === 'profiles' && !!(p.arg && p.arg.start)));
   if (IO) IO.disconnect();
   LAZY = {};
   $$('.tab').forEach(function (t) {
@@ -381,10 +383,30 @@ var PAGES = {
         '</div></div></div>';
     });
   },
+  profiles: function () {
+    return loadProfiles().then(function (p) {
+      if (!p) throw new Error('profiles couldn’t be loaded');
+      var pg = cur(); if (!pg.focusKey) pg.focusKey = 'p' + p.current.id;
+      return '<div class="who"><h1>Who’s watching?</h1><div class="btns ptiles">' + p.profiles.map(function (x) {
+        return '<button class="f ptile' + (x.child ? ' child' : '') + '" data-k="p' + x.id + '" data-prof="' + x.id + '">' +
+          '<span class="pav">' + esc(x.name.slice(0, 1).toUpperCase()) + '</span><b>' + esc(x.name) + '</b>' +
+          '<small>' + (x.child ? 'Child' : x.id === p.current.id ? 'This TV' : '') + '</small></button>';
+      }).join('') + '</div>' + (p.current.child ? '<p class="muted">Grown-up profiles need the exit code.</p>' : '') + '</div>';
+    });
+  },
+  code: function (target) {
+    return Promise.resolve('<div class="who"><h1>Exit code</h1><p class="muted">To switch to ' + esc(target.name) +
+      ', enter the exit code with the number buttons, then press OK.</p>' +
+      '<input class="f code-box" id="code" data-k="code" type="password" inputmode="numeric" maxlength="12" autocomplete="off">' +
+      '<p class="err" id="codeerr" hidden></p><div class="btns ptiles"><button class="f btn primary" data-k="code-ok" data-act="code-ok">Switch</button>' +
+      '<button class="f btn" data-k="code-cancel" data-act="code-cancel">Cancel</button></div></div>');
+  },
   settings: function () {
-    return Promise.all([api('/api/hello'), api('/api/themes').catch(function () { return null; })]).then(function (r) {
-      var h = r[0], inApp = /[?&]app=1(&|$)/.test(location.search) || !!window.PalmSystem;
-      return '<h1>Settings</h1>' + themesHTML(r[1]) +
+    return Promise.all([api('/api/hello'), api('/api/themes').catch(function () { return null; }), loadProfiles()]).then(function (r) {
+      var h = r[0], inApp = /[?&]app=1(&|$)/.test(location.search) || !!window.PalmSystem, pr = r[2];
+      return '<h1>Settings</h1>' + (wantPicker(pr) ? '<h2>Profile</h2><div class="facts"><span>Watching as <b style="color:var(--fg)">' +
+        esc(pr.current.name) + '</b>' + (pr.current.child ? ' (child)' : '') + '</span></div>' +
+        '<div class="btns"><button class="f btn" data-k="profiles" data-act="profiles">Change profile</button></div>' : '') + themesHTML(r[1]) +
         '<h2>Connection</h2>' +
         '<div class="facts"><span>Connected to <b style="color:var(--fg)">' + esc(h.name) + '</b></span></div>' +
         '<div class="facts"><span>Address: ' + esc(location.host) + '</span><span>PictureHouse ' + esc(h.version) + '</span></div>' +
@@ -428,7 +450,40 @@ var PAGES = {
     });
   }
 };
+PAGES.code.after = function () { var i = $('#code'); if (i) { focus(i); i.focus(); } };
 var ITEMS = {}, SHOWS = {};
+
+/* ---------- Who's watching? ----------
+   Each TV uses one profile, kept by the server (by the TV's address). The
+   picker opens with the app when there is more than one profile. */
+var PROFILES = null;
+function loadProfiles() {
+  return api('/api/profiles').then(function (p) { PROFILES = p; return p; }).catch(function () { PROFILES = null; return null; });
+}
+function wantPicker(p) { return !!(p && p.profiles && p.profiles.length > 1); }
+function enterApp() { $('#top').classList.remove('hide'); go('home', null, true); }
+function pickProfile(id, code) {
+  var p = PROFILES; if (!p) return;
+  var target = p.profiles.filter(function (x) { return x.id === id; })[0];
+  if (!target) return;
+  if (id === p.current.id) { enterApp(); return; }
+  if (p.current.child && !target.child && code == null) { go('code', { id: id, name: target.name }); return; }
+  api('/api/profiles/current', { method: 'PUT', body: { id: id, code: code } }).then(function (res) {
+    PROFILES = res; ITEMS = {}; SHOWS = {};
+    toast('Watching as ' + res.current.name);
+    enterApp();
+  }).catch(function (e) {
+    var err = $('#codeerr'), box = $('#code');
+    if (err && box) { err.textContent = e.message; err.hidden = false; box.value = ''; focus(box); box.focus(); }
+    else toast(e.message);
+  });
+}
+function submitCode() {
+  var box = $('#code'), p = cur(); if (!box || !p || p.name !== 'code') return;
+  var code = box.value.trim();
+  if (!/^\d{4,12}$/.test(code)) { var err = $('#codeerr'); err.textContent = 'The exit code is 4 to 12 digits.'; err.hidden = false; return; }
+  box.blur(); pickProfile(p.arg.id, code);
+}
 
 /* Themes (docs/themes.md): this TV can use its own, kept in its storage like
    the console's per-device choice; otherwise it follows the server default. */
@@ -478,6 +533,10 @@ function activate(el) {
   if (el.dataset.act === 'retry') { render(); return; }
   if (el.dataset.act === 'reload') { location.reload(); return; }
   if (el.dataset.act === 'change-server') { changeServer(); return; }
+  if (el.dataset.prof) { pickProfile(+el.dataset.prof); return; }
+  if (el.dataset.act === 'profiles') { go('profiles', { start: false }); return; }
+  if (el.dataset.act === 'code-ok') { submitCode(); return; }
+  if (el.dataset.act === 'code-cancel') { back(); return; }
   if (el.dataset.theme != null) { setTvTheme(el.dataset.theme || null); return; }
   if (el.dataset.play) { play(+el.dataset.play, !!el.dataset.restart); return; }
   if (el.dataset.item) { go('item', el.dataset.item); return; }
@@ -486,7 +545,7 @@ function activate(el) {
     var p = cur(); p.season = +el.dataset.season; p.focusKey = 'season' + p.season;
     p.scroll = $('.page .scroller').scrollTop; render(); return;
   }
-  if (el.id === 'q') el.focus();
+  if (el.tagName === 'INPUT') el.focus();
 }
 
 /* Back to the TV app's launcher, which then shows its server chooser. The
@@ -692,7 +751,8 @@ document.addEventListener('keydown', function (e) {
   var k = e.keyCode;
   if (!$('#player').hidden) { e.preventDefault(); playerKey(k); return; }
   for (var h = 0; h < KEY_HANDLERS.length; h++) if (KEY_HANDLERS[h](k, e)) { e.preventDefault(); return; }
-  var typing = document.activeElement && document.activeElement.id === 'q';
+  var typing = document.activeElement && document.activeElement.tagName === 'INPUT';
+  if (typing && k === KEY.ENTER && document.activeElement.id === 'code') { e.preventDefault(); submitCode(); return; }
   if (typing && (k === KEY.BACKSPACE || (k >= 48 && k <= 90) || k === 32)) return;  // let the text box have it
   if (k === KEY.LEFT) { e.preventDefault(); move('left'); }
   else if (k === KEY.RIGHT) { e.preventDefault(); move('right'); }
@@ -709,4 +769,35 @@ document.addEventListener('visibilitychange', function () { if (document.hidden 
 
 function tick() { var d = new Date(); $('#clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
 tick(); setInterval(tick, 15000);
-go('home', null, true);
+
+function launch() {
+  loadProfiles().then(function (p) { if (wantPicker(p)) go('profiles', { start: true }, true); else go('home', null, true); });
+}
+/* webOS doesn't reload an app it kept in the background: opening it again
+   resumes this page as it was. So when it comes back, ask the server for its
+   build: newer files there means reload (the newest interface), otherwise
+   start again at Who's watching? as a fresh launch would. Never while
+   something is playing. */
+var BUILD = null, hiddenAt = 0, freshT = null, freshRelaunch = false;
+api('/api/hello').then(function (h) { BUILD = h.build; }).catch(function () { /* checked again on return */ });
+function busy() { return !!P || document.body.classList.contains('overlay') || !$('#audio').paused; }
+function freshen(relaunched) {
+  freshRelaunch = freshRelaunch || relaunched;
+  clearTimeout(freshT);
+  freshT = setTimeout(function () {  // the relaunch and visibility events come together: act once
+    var again = freshRelaunch; freshRelaunch = false;
+    if (busy()) return;
+    api('/api/hello').then(function (h) {
+      if (h && h.build && BUILD && h.build !== BUILD) { location.reload(); return; }
+      if (h && h.build) BUILD = h.build;
+      if (again) launch();
+    }).catch(function () { if (again) launch(); });
+  }, 300);
+}
+document.addEventListener('webOSRelaunch', function () { freshen(true); });
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  // Back after a while (someone else may be watching now): like a relaunch.
+  if (hiddenAt) freshen(Date.now() - hiddenAt > 10 * 60 * 1000);
+});
+launch();

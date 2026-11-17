@@ -196,6 +196,19 @@ def _icon(size: int) -> bytes:
     return icon_png(size)
 
 
+def ui_build() -> str:
+    """A fingerprint of the TV interface's files (and the version), so the TV
+    app, which webOS keeps running in the background rather than reloading,
+    can tell the server has newer code and reload itself (tv.js: freshen)."""
+    h = hashlib.sha1(__version__.encode(), usedforsecurity=False)
+    for sub in ("tv", "shared"):
+        for f in sorted((STATIC_DIR / sub).glob("*")):
+            if f.is_file():
+                st = f.stat()
+                h.update(f"{sub}/{f.name}:{st.st_size}:{st.st_mtime_ns}".encode())
+    return h.hexdigest()[:12]
+
+
 class RevalidatingStaticFiles(StaticFiles):
     """Static files that browsers must revalidate (cheap 304s via ETag), so an
     updated console is picked up on the next load instead of a stale cache."""
@@ -392,7 +405,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
         """ "Is this PictureHouse?" for the LG TV app, which scans the network
         from its own (file://) origin: hence CORS, and nothing private."""
         return JSONResponse({"app": "picturehouse", "name": svc.settings.server.friendly_name,
-                             "version": __version__, "tv": "/tv/"},
+                             "version": __version__, "build": ui_build(), "tv": "/tv/"},
                             headers={"Access-Control-Allow-Origin": "*"})  # fmt: skip
 
     @api.get("/status")

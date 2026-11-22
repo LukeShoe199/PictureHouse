@@ -16,7 +16,7 @@
 <!-- Big-screen interface for the LG TV app (webOS 5 = Chrome 68: keep the
      JavaScript ES2017 and the CSS free of flex gap, :is(), aspect-ratio). -->
 <header class="top" id="top">
-  <div class="brand"><span class="logo"></span>PictureHouse</div>
+  <div class="brand"><span class="logo"><svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M18 50 L50 21 L82 50 L74 50 L74 80 L26 80 L26 50 Z" fill="var(--accent-ink)" stroke="var(--accent-ink)" stroke-width="4" stroke-linejoin="round"/><path d="M43 52 L43 72 L60 62 Z" fill="var(--accent)" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round"/></svg></span>PictureHouse</div>
   <nav class="tabs" id="tabs">
     <button class="f tab" data-go="home">Home</button>
     <button class="f tab" data-go="films">Films</button>
@@ -38,7 +38,8 @@
     <div class="osd-top"><div class="osd-title" id="ptitle"></div><div class="osd-sub" id="psub"></div></div>
     <div class="osd-msg" id="pmsg" hidden></div>
     <div class="osd-bottom">
-      <div class="bar"><i id="pbuf"></i><b id="pbar"></b></div>
+      <div class="seekwrap"><div class="seeklabel" id="pseekt" hidden></div>
+        <div class="bar"><i id="pbuf"></i><b id="pbar"></b><u id="pseek" hidden></u></div></div>
       <div class="times"><span id="pcur">0:00</span><span id="ptot">0:00</span></div>
       <div class="ctl vctl" id="vctl">
         <button class="cbtn" data-v="back"><svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg><span>10 s</span></button>

@@ -2,19 +2,19 @@
    Network-first for the app shell so updates show up straight away, with a cache fallback so the console
    still opens offline (it then shows "Server unreachable"). API calls, DLNA and media are never touched. */
 'use strict';
-const VERSION = 'picturehouse-shell-v1';
+const VERSION = 'picturehouse-shell-v2';  // v2: the house logo (new icons)
 const SHELL = [
   '/',
   '/static/app.js',
   '/static/app.css',
   '/manifest.webmanifest',
-  '/icons/icon-48.png',
-  '/icons/icon-120.png',
-  '/icons/icon-152.png',
-  '/icons/icon-167.png',
-  '/icons/icon-180.png',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/icons/icon-48.png?v=2',
+  '/icons/icon-120.png?v=2',
+  '/icons/icon-152.png?v=2',
+  '/icons/icon-167.png?v=2',
+  '/icons/icon-180.png?v=2',
+  '/icons/icon-192.png?v=2',
+  '/icons/icon-512.png?v=2',
   '/static/vendor/hls-1.7.3.min.js'
 ];
 const SHELL_SET = new Set(SHELL);

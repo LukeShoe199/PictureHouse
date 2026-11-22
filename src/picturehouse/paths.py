@@ -115,6 +115,11 @@ class DataLayout:
     def log_dir(self) -> Path:
         return self.root / "logs"
 
+    @property
+    def avatars_dir(self) -> Path:
+        """Profile pictures (picturehouse.profiles): the user's own, so not a cache."""
+        return self.root / "avatars"
+
     def writable_dirs(self) -> list[Path]:
         return [
             self.root,

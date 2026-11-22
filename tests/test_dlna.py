@@ -250,3 +250,23 @@ def test_transcode_refused_when_server_busy(client, monkeypatch):
     assert r.status_code == 503 and "already converting" in r.text
     assert time.monotonic() - t0 >= 0.4  # it queued first
     procs.slots.release("someone-else")
+
+
+def test_logo_icons_are_smooth_and_the_right_shape():
+    import io
+
+    from PIL import Image
+
+    from picturehouse.dlna.xmldocs import icon_png
+
+    for size in (16, 48, 512):
+        with Image.open(io.BytesIO(icon_png(size))) as im:
+            assert im.size == (size, size) and im.mode == "RGB"
+            assert im.getpixel((0, 0)) == (10, 13, 17)  # the app's dark background in the corner
+            # Anti-aliased: edge pixels blend (the old pixel-by-pixel logo had 3 colours).
+            assert len(im.getcolors(maxcolors=1 << 20)) > 10
+    with Image.open(io.BytesIO(icon_png(64, rgba=True))) as im:
+        assert im.mode == "RGBA" and im.getpixel((0, 0))[3] == 0  # transparent corner
+        assert im.getpixel((32, 6))[3] == 255  # the tile itself is solid
+    with Image.open(io.BytesIO(icon_png(96, rgba=True, round_=True))) as im:
+        assert im.getpixel((8, 8))[3] == 0  # outside the circle

@@ -152,6 +152,7 @@ class ApiError extends Error { constructor(msg, status) { super(msg); this.statu
 async function api(path, opts = {}) {
   const init = { method: opts.method || 'GET', headers: { Accept: 'application/json' } };
   if (opts.body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+  if (opts.file) { init.headers['Content-Type'] = opts.file.type || 'application/octet-stream'; init.body = opts.file; }
   if (opts.keepalive) init.keepalive = true;
   let r;
   try { r = await fetch(path, init); } catch (e) { throw new ApiError('Could not reach the server. Check that it is running.', 0); }
@@ -822,6 +823,9 @@ VIEWS.library = {
    server (so clearing the browser changes nothing). Child profiles see kids
    libraries only; leaving one needs the exit code. Changing profile reloads
    the page so every list is fetched again for the new profile. */
+const avHTML = (x, cls) => x.avatar
+  ? `<span class="${cls} pic" aria-hidden="true" style="background:center/cover no-repeat url('${esc(x.avatar)}')"></span>`
+  : `<span class="${cls}" aria-hidden="true">${esc(x.name.slice(0, 1).toUpperCase())}</span>`;
 function setProfiles(p) {
   S.profiles = p;
   const child = !!(p && p.current && p.current.child);
@@ -838,7 +842,7 @@ function renderProfBtn() {
   const me = p.current;
   b.hidden = false;
   b.classList.toggle('child', me.child);
-  b.innerHTML = `<span class="pav" aria-hidden="true">${esc(me.name.slice(0, 1).toUpperCase())}</span><strong>${esc(me.name)}</strong>`;
+  b.innerHTML = `${avHTML(me, 'pav')}<strong>${esc(me.name)}</strong>`;
   b.setAttribute('aria-label', `Profile: ${me.name}. Change profile`);
 }
 function renderProfMenu() {
@@ -882,7 +886,7 @@ function showSplash() {
   el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'splashTitle');
   el.innerHTML = `<h1 id="splashTitle">Who's watching?</h1>
     <div class="splash-row">${p.profiles.map(x => `<button class="splash-tile${x.child ? ' child' : ''}" data-splash="${x.id}">
-      <span class="splash-av" aria-hidden="true">${esc(x.name.slice(0, 1).toUpperCase())}</span>
+      ${avHTML(x, 'splash-av')}
       <b>${esc(x.name)}</b><small>${x.child ? 'Child' : x.id === p.current.id ? 'This device' : ''}</small></button>`).join('')}</div>
     ${p.current.child ? '<p class="splash-note">Grown-up profiles need the exit code.</p>' : ''}`;
   for (const n of document.body.children) n.inert = true;
@@ -929,10 +933,12 @@ function profilesHTML(p, admin, libs) {
     const confirming = L.confirm === 'profile:' + x.id;
     const name = L.renaming === x.id
       ? `<form class="pathrow" id="renameform" data-id="${x.id}" novalidate autocomplete="off"><input name="name" value="${esc(x.name)}" maxlength="40" aria-label="New name" data-nav><button type="submit" class="btn small" data-nav>Save</button></form>`
-      : `${esc(x.name)}${x.id === p.current.id ? '<span class="pill quiet">This device</span>' : ''}`;
+      : `<span class="profname">${avHTML(x, 'pav-s')}${esc(x.name)}</span>${x.id === p.current.id ? '<span class="pill quiet">This device</span>' : ''}`;
     const main = x.id === 1;
     return `<tr><td>${name}</td><td>${x.child ? '<span class="pill">Child</span>' : 'Adult'}${main ? ' · devices not set use this' : ''}</td>
       <td class="num">${L.renaming === x.id ? '' : `<button class="rowbtn" data-nav data-act="prof-rename" data-id="${x.id}">Rename</button>`}
+        <button class="rowbtn" data-nav data-act="prof-pic" data-id="${x.id}">${x.avatar ? 'Change picture' : 'Add picture'}</button>
+        ${x.avatar ? `<button class="rowbtn" data-nav data-act="prof-pic-remove" data-id="${x.id}">Remove picture</button>` : ''}
         ${main ? '' : `<button class="rowbtn" data-nav data-act="prof-kind" data-id="${x.id}" data-child="${x.child ? '0' : '1'}">${x.child ? 'Make adult' : 'Make child'}</button>
         <button class="rowbtn${confirming ? ' danger' : ''}" data-nav data-act="prof-remove" data-id="${x.id}">${confirming ? 'Confirm remove' : 'Remove'}</button>`}</td></tr>`;
   }).join('');
@@ -956,6 +962,24 @@ async function profAct(name, btn) {
   const done = (msg) => { if (msg) toast(msg); route({ keepScroll: true }); loadProfiles(); };
   const fail = e => { btn.disabled = false; toast(e.message); };
   if (name === 'prof-rename') { L.renaming = id; redraw('#renameform input'); return; }
+  if (name === 'prof-pic') {
+    // A file picker; on phones this also offers the camera.
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = async () => {
+      const f = input.files && input.files[0]; if (!f) return;
+      if (f.size > 20 * 1024 * 1024) { toast('That picture is too big (20 MB at most).'); return; }
+      btn.disabled = true;
+      try { await api(`/api/profiles/${id}/avatar`, { method: 'PUT', file: f }); done('Picture saved'); } catch (e) { fail(e); }
+    };
+    input.click();
+    return;
+  }
+  if (name === 'prof-pic-remove') {
+    btn.disabled = true;
+    try { await api(`/api/profiles/${id}/avatar`, { method: 'DELETE' }); done('Picture removed'); } catch (e) { fail(e); }
+    return;
+  }
   if (name === 'prof-kind') {
     btn.disabled = true;
     try { await api(`/api/profiles/${id}`, { method: 'PUT', body: { child: btn.dataset.child === '1' } }); done(); } catch (e) { fail(e); }

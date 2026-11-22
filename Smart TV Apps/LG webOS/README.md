@@ -127,8 +127,8 @@ The app is in the TV's app list. To move it to the front of the bar: press
 | **OK** | Open / play |
 | **Back** | Go back (on the Home screen it closes the app) |
 | **OK** while playing | Pause / play |
-| **◀ / ▶** while playing | Back 10 seconds / forward 30 seconds |
-| **⏪ / ⏩** | Back / forward 1 minute |
+| **◀ / ▶** while playing | Back 10 seconds / forward 30 seconds. Keep pressing (or hold) and the steps grow: up to 5 minutes. A marker shows where you'll land; the video jumps there a moment after you stop, or straight away on **OK** |
+| **⏪ / ⏩** while playing | Scan: the marker runs at ×4, and each press doubles it (up to ×128). The other button slows down, then reverses. **OK** or **▶** plays from there; **Back** returns to where you were |
 | **■** (stop) or **Back** while playing | Stop, keeping your place |
 | **Red**, while "Opening PictureHouse…" shows | Choose a different PictureHouse server |
 

@@ -389,7 +389,8 @@ var PAGES = {
       var pg = cur(); if (!pg.focusKey) pg.focusKey = 'p' + p.current.id;
       return '<div class="who"><h1>Who’s watching?</h1><div class="btns ptiles">' + p.profiles.map(function (x) {
         return '<button class="f ptile' + (x.child ? ' child' : '') + '" data-k="p' + x.id + '" data-prof="' + x.id + '">' +
-          '<span class="pav">' + esc(x.name.slice(0, 1).toUpperCase()) + '</span><b>' + esc(x.name) + '</b>' +
+          (x.avatar ? '<span class="pav pic" style="background:center/cover no-repeat url(\'' + esc(x.avatar) + '\')"></span>'
+            : '<span class="pav">' + esc(x.name.slice(0, 1).toUpperCase()) + '</span>') + '<b>' + esc(x.name) + '</b>' +
           '<small>' + (x.child ? 'Child' : x.id === p.current.id ? 'This TV' : '') + '</small></button>';
       }).join('') + '</div>' + (p.current.child ? '<p class="muted">Grown-up profiles need the exit code.</p>' : '') + '</div>';
     });
@@ -571,7 +572,7 @@ function osd(show) {
   var o = $('#osd');
   clearTimeout(osd.t);
   o.classList.toggle('hide', !show);
-  if (show && P && !V.paused) osd.t = setTimeout(function () { o.classList.add('hide'); }, 4000);
+  if (show && P && !V.paused && !P.scrub && !P.scan) osd.t = setTimeout(function () { o.classList.add('hide'); }, 4000);
 }
 function play(id, fromStart) {
   var load = ITEMS[id] ? Promise.resolve(ITEMS[id]) : api('/api/items/' + id);
@@ -637,6 +638,7 @@ function saveProgress(final) {
 }
 function stopPlayer() {
   if (!P) return;
+  endSeek();
   var saved = saveProgress(true);
   clearTimeout(P.upNextT);
   if (P.sid) api('/api/hls/' + P.sid, { method: 'DELETE', keepalive: true }).catch(function () {});
@@ -646,10 +648,93 @@ function stopPlayer() {
   delete ITEMS[wasId];
   saved.then(render);  // after the save lands, so "Resume" and progress bars are current
 }
-function seekBy(s) {
-  if (!P || !V.duration) return;
-  var t = Math.max(0, Math.min(pos() + s, (total() || V.duration) - 2));
-  V.currentTime = t; drawBar(); osd(true);
+/* ---------- Seeking ----------
+   ◀ ▶: presses add up. The bar shows where you'll land and the video jumps
+   once, a moment after the last press (or straight away on OK): a converted
+   stream restarts the converter at every jump, so one jump instead of one
+   per press is what makes it quick. Pressing (or holding) on makes the steps
+   bigger: 30 s, then 1 min, 2 min, 5 min forward; 10 s, then 30 s ... back.
+   ⏪ ⏩: scan. The picture holds while the marker runs at ×4, and each press
+   doubles it (to ×128); the opposite button slows down, then reverses. OK or
+   Play lands there, Back returns to where you were. */
+var STEPS = { fwd: [30, 30, 30, 60, 60, 120, 120, 300], back: [10, 10, 10, 30, 30, 60, 60, 120, 300] };
+var SCAN_MIN = 4, SCAN_MAX = 128;
+function clampT(t) { return Math.max(0, Math.min(t, total() - 2)); }
+function nudge(dir) {
+  if (!P || !total()) return;
+  var s = P.scrub;
+  if (P.scan) { s = { target: P.scan.target, dir: dir, n: 0 }; P.resumeAfter = !P.scan.wasPaused; endScan(); }
+  if (!s) s = { target: pos(), dir: dir, n: 0 };
+  if (s.dir !== dir) { s.dir = dir; s.n = 0; }  // changed direction: small steps again
+  var list = dir > 0 ? STEPS.fwd : STEPS.back;
+  s.target = clampT(s.target + dir * list[Math.min(s.n, list.length - 1)]);
+  s.n++;
+  P.scrub = s;
+  clearTimeout(s.t); s.t = setTimeout(commitSeek, 900);
+  drawSeek(); osd(true);
+}
+function commitSeek() {
+  if (!P || !P.scrub) return;
+  var t = P.scrub.target;
+  clearTimeout(P.scrub.t); P.scrub = null;
+  V.currentTime = t;
+  if (P.resumeAfter) { P.resumeAfter = false; startPlaying(); }
+  drawSeek(); drawBar(); osd(true);
+}
+function scan(dir) {
+  if (!P || !total()) return;
+  var sc = P.scan;
+  if (!sc) {
+    var from = P.scrub ? P.scrub.target : pos();
+    if (P.scrub) { clearTimeout(P.scrub.t); P.scrub = null; }
+    sc = P.scan = { target: from, origin: pos(), dir: dir, speed: 0, wasPaused: V.paused || !!P.resumeAfter, at: Date.now() };
+    P.resumeAfter = false;
+    V.pause();
+    sc.timer = setInterval(scanTick, 200);
+  }
+  if (!sc.speed) sc.speed = SCAN_MIN;
+  else if (sc.dir === dir) sc.speed = Math.min(SCAN_MAX, sc.speed * 2);
+  else if (sc.speed > SCAN_MIN) sc.speed = sc.speed / 2;  // the other way: slow down first...
+  else sc.dir = dir;  // ...then reverse
+  drawSeek(); osd(true);
+}
+function scanTick() {
+  var sc = P && P.scan; if (!sc) return;
+  var now = Date.now(), dt = (now - sc.at) / 1000; sc.at = now;
+  sc.target = clampT(sc.target + sc.dir * sc.speed * dt);
+  drawSeek();
+}
+function endScan() { if (P && P.scan) { clearInterval(P.scan.timer); P.scan = null; } }
+function landScan() {  // OK / Play: watch from the marker
+  if (!P || !P.scan) return;
+  var t = P.scan.target; endScan();
+  V.currentTime = t; startPlaying();
+  drawSeek(); drawBar(); osd(true);
+}
+function cancelSeek() {  // Back: as you were
+  if (!P) return;
+  if (P.scan) { var sc = P.scan; endScan(); if (!sc.wasPaused) startPlaying(); }
+  if (P.scrub) { clearTimeout(P.scrub.t); P.scrub = null; }
+  if (P.resumeAfter) { P.resumeAfter = false; startPlaying(); }
+  drawSeek(); osd(true);
+}
+function endSeek() {
+  if (!P) return;
+  endScan();
+  if (P.scrub) { clearTimeout(P.scrub.t); P.scrub = null; }
+}
+function sign(s) { return (s < 0 ? '−' : '+') + clock(Math.abs(s)); }
+function drawSeek() {
+  var mark = $('#pseek'), label = $('#pseekt');
+  var t = P && (P.scan ? P.scan.target : P.scrub ? P.scrub.target : null);
+  if (t == null || !total()) { mark.hidden = true; label.hidden = true; return; }
+  var pct = t / total() * 100;
+  mark.style.left = pct.toFixed(2) + '%'; mark.hidden = false;
+  label.style.left = Math.max(5, Math.min(95, pct)).toFixed(2) + '%';
+  label.textContent = P.scan
+    ? (P.scan.dir > 0 ? '▶▶ ×' : '◀◀ ×') + P.scan.speed + '   ' + clock(t)
+    : clock(t) + '   (' + sign(t - pos()) + ')';
+  label.hidden = false;
 }
 function drawBar() {
   var t = total();
@@ -686,7 +771,7 @@ document.addEventListener('click', function (e) {
   if (!b || !P) return;
   e.stopPropagation();
   var v = b.dataset.v;
-  if (v === 'back') seekBy(-10); else if (v === 'fwd') seekBy(30);
+  if (v === 'back') nudge(-1); else if (v === 'fwd') nudge(1);
   else if (v === 'toggle') { if (V.paused) V.play(); else V.pause(); osd(true); }
   else if (v === 'next') nextEpisode(); else if (v === 'stop') stopPlayer();
 }, true);
@@ -732,15 +817,19 @@ function upNext() {
 }
 function playerKey(k) {
   if (P && P.upNext && (k === KEY.ENTER || k === KEY.PLAY)) { var id = P.upNext.id; stopPlayer(); play(id, true); return; }
+  if (P && (P.scan || P.scrub)) {
+    if (k === KEY.ENTER || k === KEY.PLAY || k === KEY.PLAYPAUSE) { if (P.scan) landScan(); else commitSeek(); return; }
+    if (k === KEY.BACK || k === KEY.ESC || k === KEY.BACKSPACE) { cancelSeek(); return; }
+  }
   switch (k) {
     case KEY.BACK: case KEY.ESC: case KEY.BACKSPACE: case KEY.STOP: stopPlayer(); return;
     case KEY.ENTER: case KEY.PLAYPAUSE: if (V.paused) V.play(); else V.pause(); osd(true); return;
     case KEY.PLAY: V.play(); return;
     case KEY.PAUSE: V.pause(); return;
-    case KEY.LEFT: seekBy(-10); return;
-    case KEY.RIGHT: seekBy(30); return;
-    case KEY.RW: seekBy(-60); return;
-    case KEY.FF: seekBy(60); return;
+    case KEY.LEFT: nudge(-1); return;
+    case KEY.RIGHT: nudge(1); return;
+    case KEY.RW: scan(-1); return;
+    case KEY.FF: scan(1); return;
     case KEY.PGUP: nextEpisode(); return;  // channel up: next episode
     case KEY.UP: case KEY.DOWN: osd(true); return;
   }

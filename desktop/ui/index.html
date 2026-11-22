@@ -12,8 +12,8 @@
                font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
   body { display: grid; place-items: center; padding: 24px; }
   .box { width: min(520px, 100%); text-align: center; display: grid; gap: 18px; justify-items: center; }
-  .logo { width: 72px; height: 72px; border-radius: 18px; background: var(--accent); color: var(--ink);
-          display: grid; place-items: center; font: 900 26px/1 "Segoe UI", sans-serif; letter-spacing: .02em; }
+  .logo { width: 72px; height: 72px; border-radius: 18px; background: var(--accent); color: var(--ink); }
+  .logo svg { width: 100%; height: 100%; display: block; }
   h1 { margin: 0; font-size: 22px; font-weight: 700; }
   p { margin: 0; color: var(--muted); }
   .bar { width: 220px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
@@ -30,7 +30,7 @@
 </head>
 <body>
   <div class="box">
-    <div class="logo" aria-hidden="true">PH</div>
+    <div class="logo" aria-hidden="true"><svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M18 50 L50 21 L82 50 L74 50 L74 80 L26 80 L26 50 Z" fill="currentColor" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M43 52 L43 72 L60 62 Z" fill="var(--accent)" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round"/></svg></div>
     <h1>PictureHouse</h1>
     <p id="msg">Starting the media server…</p>
     <div class="bar" role="progressbar" aria-label="Starting"><i></i></div>

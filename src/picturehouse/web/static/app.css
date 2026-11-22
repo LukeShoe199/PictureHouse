@@ -45,7 +45,8 @@ img { display: block; }
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   background: var(--bg-rail); border-right: 1px solid var(--line); }
 .logo { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 18px;
-  background: var(--accent); color: var(--accent-ink); font: 900 17px/1 var(--display); font-stretch: 70%; letter-spacing: .02em; }
+  background: var(--accent); color: var(--accent-ink); }
+.logo .mark { width: 100%; height: 100%; display: block; }
 .navbtn { width: 72px; padding-block: 10px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px;
   color: var(--muted); font-size: 11.5px; font-weight: 600; letter-spacing: .02em; }
 .navbtn:hover { color: var(--fg); background: var(--surface); }
@@ -599,6 +600,10 @@ body.phv-open { overflow: hidden; }
 .profbtn .pav { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; margin-left: -6px;
   background: var(--accent); color: var(--accent-ink); font: 700 13px/1 var(--body); }
 .profbtn.child .pav { background: var(--good); }
+.pic { background-size: cover; background-position: center; color: transparent; }
+.profname { display: inline-flex; align-items: center; gap: 10px; }
+.pav-s { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: var(--accent); color: var(--accent-ink); font: 700 14px/1 var(--body); }
 .devopt .pav { display: none; }
 :root[data-child] #nav-library { display: none; }
 .profiles td .pill { margin-left: 6px; }

@@ -75,6 +75,7 @@ dlna_log = logging.getLogger("picturehouse.dlna.requests")
 
 Sort = Literal["added", "az", "year"]
 STATIC_DIR = Path(str(files("picturehouse.web").joinpath("static")))
+ICON_V = 2  # in icon URLs: bump when the logo changes, so browsers and home screens fetch it
 # So phones offer to install the APK rather than show "unknown file".
 mimetypes.add_type("application/vnd.android.package-archive", ".apk")
 
@@ -1449,6 +1450,29 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
             log.info("profile changed", extra={"client": who, "from": before.name, "to": p.name})
         return profiles_state(request)
 
+    @api.get("/profiles/{profile_id}/avatar")
+    def profile_avatar(profile_id: int):
+        """A profile's picture (any device: pickers show them). The URL
+        carries ?v=, so it can be cached for long."""
+        f = profiles.avatar_file(profile_id)
+        if not f.is_file():
+            raise HTTPException(404, "no picture")
+        return FileResponse(f, media_type="image/jpeg",
+                            headers={"Cache-Control": "public, max-age=31536000, immutable"})  # fmt: skip
+
+    @api.put("/profiles/{profile_id}/avatar")
+    async def set_profile_avatar(profile_id: int, request: Request):
+        """Body: the picture file itself (any image type)."""
+        data = await request.body()
+        info = await anyio.to_thread.run_sync(
+            lambda: profile_call(profiles.set_avatar, profile_id, data)
+        )
+        return info.json()
+
+    @api.delete("/profiles/{profile_id}/avatar")
+    def remove_profile_avatar(profile_id: int):
+        return profile_call(profiles.remove_avatar, profile_id).json()
+
     @api.post("/profiles", status_code=201)
     def create_profile(body: NewProfile):
         if body.child and not profiles.code_set:
@@ -1596,7 +1620,7 @@ def create_app(svc: Services, *, dlna=None, https: dict | None = None) -> FastAP
     @app.get("/manifest.webmanifest", include_in_schema=False)
     def manifest():
         name = svc.settings.server.friendly_name
-        icons = [{"src": f"/icons/icon-{n}.png", "sizes": f"{n}x{n}", "type": "image/png",
+        icons = [{"src": f"/icons/icon-{n}.png?v={ICON_V}", "sizes": f"{n}x{n}", "type": "image/png",
                   "purpose": "any maskable"} for n in (192, 512)]  # fmt: skip
         body = {"name": name, "short_name": "PictureHouse", "start_url": "/", "scope": "/",
                 "display": "standalone", "background_color": "#0a0d11",

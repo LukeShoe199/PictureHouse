@@ -112,11 +112,11 @@ def page(name: str, title: str, body: str, *, back: tuple[str, str] | None = Non
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="PictureHouse">
-<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<link rel="apple-touch-icon" href="/icons/icon-180.png?v=2">
 <title>{e(title)} &middot; {e(name)}</title>
 <link rel="stylesheet" href="/static/lite.css">
 </head><body>
-<div class="bar"><a class="logo" href="/lite/">PH</a><span class="nav">{nav}</span></div>
+<div class="bar"><a class="logo" href="/lite/" aria-label="PictureHouse"><svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M18 50 L50 21 L82 50 L74 50 L74 80 L26 80 L26 50 Z" fill="#f2b33d" stroke="#f2b33d" stroke-width="4" stroke-linejoin="round"/><path d="M43 52 L43 72 L60 62 Z" fill="#080a0d" stroke="#080a0d" stroke-width="3" stroke-linejoin="round"/></svg></a><span class="nav">{nav}</span></div>
 <div class="main">{crumb}{body}</div>
 <p class="foot">{e(name)} &middot; PictureHouse Lite, for older devices &middot;
 <a href="/?full=1">Full version</a> (newer browsers)</p>

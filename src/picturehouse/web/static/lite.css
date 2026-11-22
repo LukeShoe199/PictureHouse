@@ -14,7 +14,8 @@ h2 { font-size: 19px; margin: 26px 0 10px; }
 .bar { background: #080a0d; border-bottom: 1px solid #243041; padding: 0 12px;
   white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .bar a { display: inline-block; padding: 14px 10px; color: #eef1f4; font-weight: 600; }
-.bar .logo { color: #f2b33d; font-weight: 800; letter-spacing: 1px; padding-right: 14px; }
+.bar .logo { padding: 10px 14px 10px 4px; vertical-align: middle; }
+.bar .logo .mark { width: 26px; height: 26px; display: block; }
 .main { padding: 10px 16px 24px; }
 .back { display: inline-block; padding: 6px 0; color: #93a0b0; }
 .foot { padding: 16px; color: #5f6b7a; font-size: 13px; border-top: 1px solid #243041; margin: 0; }

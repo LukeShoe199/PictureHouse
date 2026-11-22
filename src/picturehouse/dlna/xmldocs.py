@@ -176,42 +176,55 @@ def event_propertyset(values: dict[str, str | int]) -> str:
     )
 
 
-def icon_png(size: int, rgba: bool = False) -> bytes:
-    """The rail logo as a PNG: amber rounded square with a dark play triangle.
+# The logo (docs: a house whose door is a play button), in a 100x100 box.
+# The same shapes are inline SVG in the web console, Lite, the TV interface,
+# the TV launcher and the desktop app's start page.
+LOGO_HOUSE = [(18, 50), (50, 21), (82, 50), (74, 50), (74, 80), (26, 80), (26, 50)]
+LOGO_DOOR = [(43, 52), (43, 72), (60, 62)]
+LOGO_AMBER, LOGO_INK, LOGO_BG = (0xF2, 0xB3, 0x3D), (0x1B, 0x13, 0x05), (0x0A, 0x0D, 0x11)
 
-    ``rgba``: transparent outside the rounded square (desktop/tray icons);
-    otherwise RGB on the app's dark background (TVs, PWA).
+
+def logo_image(size: int, rgba: bool = False, round_: bool = False):
+    """The logo as a Pillow image, ``size`` pixels square.
+
+    ``rgba``: transparent outside the tile (desktop, tray, Android icons);
+    otherwise on the app's dark background (TVs, PWA, DLNA). ``round_``: a
+    circular tile (Android's round launcher icon).
     """
-    import struct
-    import zlib
+    from PIL import Image, ImageDraw
 
-    amber, ink, bg = (0xF2, 0xB3, 0x3D), (0x1B, 0x13, 0x05), (0x0A, 0x0D, 0x11)
-    r = size * 0.22
-    rows = []
-    for y in range(size):
-        row = bytearray([0])
-        for x in range(size):
-            cx, cy = x + 0.5, y + 0.5
-            # rounded-square mask
-            dx = max(r - cx, 0, cx - (size - r))
-            dy = max(r - cy, 0, cy - (size - r))
-            inside = dx * dx + dy * dy <= r * r
-            col = (*bg, 0) if rgba else bg
-            if inside:
-                col = amber
-                # play triangle, centred
-                tx, ty = (cx - size * 0.38) / (size * 0.32), (cy - size * 0.5) / (size * 0.34)
-                if 0 <= tx <= 1 and abs(ty) <= 1 - tx:
-                    col = ink
-                if rgba:
-                    col = (*col, 255)
-            row += bytes(col)
-        rows.append(bytes(row))
-    raw = zlib.compress(b"".join(rows), 9)
+    ss = 8 if size < 64 else 4  # drawn this many times bigger, then shrunk: smooth edges
+    n = size * ss
+    k = n / 100
+    im = Image.new("RGBA", (n, n), (0, 0, 0, 0) if rgba else (*LOGO_BG, 255))
+    d = ImageDraw.Draw(im)
+    amber, ink = (*LOGO_AMBER, 255), (*LOGO_INK, 255)
+    if round_:
+        d.ellipse([0, 0, n - 1, n - 1], fill=amber)
+    else:
+        d.rounded_rectangle([0, 0, n - 1, n - 1], radius=22 * k, fill=amber)
+    scale = 0.9 if round_ else 1.0  # a circle has less room in the corners
 
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(
-            ">I", zlib.crc32(tag + data) & 0xFFFFFFFF)  # fmt: skip
+    def pts(shape):
+        return [((50 + (x - 50) * scale) * k, (51 + (y - 51) * scale) * k) for x, y in shape]
 
-    ihdr = struct.pack(">IIBBBBB", size, size, 8, 6 if rgba else 2, 0, 0, 0)
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", raw) + chunk(b"IEND", b"")
+    def shape(points, colour, stroke):  # filled, with rounded corners
+        d.polygon(points, fill=colour)
+        w = stroke * scale * k
+        d.line([*points, points[0]], fill=colour, width=max(1, round(w)), joint="curve")
+        for x, y in points:
+            d.ellipse([x - w / 2, y - w / 2, x + w / 2, y + w / 2], fill=colour)
+
+    shape(pts(LOGO_HOUSE), ink, 4)
+    shape(pts(LOGO_DOOR), amber, 3)
+    im = im.resize((size, size), Image.Resampling.BOX)  # area average: no ringing at edges
+    return im if rgba else im.convert("RGB")
+
+
+def icon_png(size: int, rgba: bool = False, round_: bool = False) -> bytes:
+    """The logo as PNG bytes (see :func:`logo_image`)."""
+    import io
+
+    buf = io.BytesIO()
+    logo_image(size, rgba, round_).save(buf, "PNG", optimize=True)
+    return buf.getvalue()

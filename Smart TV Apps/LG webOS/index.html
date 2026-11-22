@@ -11,9 +11,8 @@
   html, body { margin: 0; height: 100%; background: #0a0d11; color: #eef1f4; overflow: hidden;
     font: 1.3rem/1.5 "Segoe UI", Arial, sans-serif; }
   .wrap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 60rem; text-align: center; }
-  .logo { width: 6rem; height: 6rem; border-radius: 1.3rem; background: #f2b33d; margin: 0 auto 2rem; position: relative; }
-  .logo:after { content: ""; position: absolute; left: 2.3rem; top: 1.6rem; border-style: solid;
-    border-width: 1.4rem 0 1.4rem 2.1rem; border-color: transparent transparent transparent #1b1305; }
+  .logo { width: 6rem; height: 6rem; border-radius: 1.3rem; background: #f2b33d; margin: 0 auto 2rem; }
+  .logo svg { width: 100%; height: 100%; display: block; }
   h1 { font-size: 3rem; margin: 0 0 1rem; letter-spacing: .02em; }
   p { color: #93a0b0; margin: .5rem 0; }
   .spinner { display: inline-block; width: 1.6rem; height: 1.6rem; border-radius: 50%; vertical-align: middle;
@@ -30,7 +29,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="logo"></div>
+  <div class="logo"><svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path d="M18 50 L50 21 L82 50 L74 50 L74 80 L26 80 L26 50 Z" fill="#1b1305" stroke="#1b1305" stroke-width="4" stroke-linejoin="round"/><path d="M43 52 L43 72 L60 62 Z" fill="#f2b33d" stroke="#f2b33d" stroke-width="3" stroke-linejoin="round"/></svg></div>
   <h1>PictureHouse</h1>
   <div id="body"><p><span class="spinner"></span>Looking for your PictureHouse server…</p></div>
 </div>

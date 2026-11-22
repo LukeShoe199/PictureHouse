@@ -520,6 +520,33 @@ def profile_remove(
     typer.echo(f"removed profile {p.name!r}")
 
 
+@profile_app.command("picture")
+@handles_errors
+def profile_picture(
+    ctx: typer.Context,
+    profile: Annotated[str, typer.Argument(help="Name or id")],
+    image: Annotated[
+        Path | None, typer.Argument(help="A photo (JPEG, PNG, WebP, HEIC...); cropped to a square")
+    ] = None,
+    remove: Annotated[bool, typer.Option("--remove", help="Back to the initial")] = False,
+) -> None:
+    """Give a profile a picture, shown in the profile pickers."""
+    store = _profiles(ctx.obj)
+    p = store.find(profile)
+    if remove:
+        store.remove_avatar(p.id)
+        typer.echo(f"{p.name}: picture removed")
+        return
+    if image is None:
+        raise PictureHouseError("give a picture file, or --remove")
+    try:
+        data = image.read_bytes()
+    except OSError as e:
+        raise PictureHouseError(f"can't read {image}: {e.strerror or e}") from e
+    store.set_avatar(p.id, data)
+    typer.echo(f"{p.name}: picture set")
+
+
 @profile_app.command("assign")
 @handles_errors
 def profile_assign(

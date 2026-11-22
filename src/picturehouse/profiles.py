@@ -15,6 +15,8 @@
   the house, separate from the admin PIN). A device can only be put into a
   child profile once an exit code exists, so it can always be got out.
 * Watch progress is kept per profile.
+* Each profile can have a **picture** (cropped square, re-encoded, kept in
+  the data directory's avatars/ folder); without one, its initial is shown.
 * Any profile can have libraries **hidden** from it (e.g. the kids' folders on
   the grown-ups' profile). That's tidiness, not a lock: an adult can unhide.
 
@@ -44,10 +46,13 @@ from picturehouse.db.models import (
     utcnow,
 )
 from picturehouse.errors import PictureHouseError
+from picturehouse.paths import DataLayout
 from picturehouse.web.access import FAILURE_WINDOW, MAX_FAILURES, hash_pin, valid_pin, verify_pin
 
 MAIN = 1  # the house default profile
 CACHE_SECONDS = 5.0  # changes from the CLI reach a running server this quickly
+AVATAR_SIZE = 512  # pixels, square
+AVATAR_MAX_BYTES = 20 * 1024 * 1024  # an upload bigger than this isn't a profile picture
 
 
 @dataclass(frozen=True)
@@ -72,9 +77,10 @@ class ProfileInfo:
     id: int
     name: str
     child: bool
+    avatar: str | None = None  # URL of the picture (versioned), None: show the initial
 
     def json(self) -> dict:
-        return {"id": self.id, "name": self.name, "child": self.child}
+        return {"id": self.id, "name": self.name, "child": self.child, "avatar": self.avatar}
 
 
 @dataclass
@@ -126,7 +132,8 @@ class ProfileStore:
             if self._devices is None or self._profiles is None or self._hidden is None or stale:
                 self._loaded_at = time.monotonic()
                 with self.db.session() as s:
-                    self._profiles = {p.id: ProfileInfo(p.id, p.name, p.child)
+                    self._profiles = {p.id: ProfileInfo(p.id, p.name, p.child,
+                                                        self._avatar_url(p.id))
                                       for p in s.scalars(select(Profile))}  # fmt: skip
                     self._devices = {
                         d.address: d.profile_id for d in s.scalars(select(DeviceProfile))
@@ -179,6 +186,7 @@ class ProfileStore:
         self.get(profile_id)
         if profile_id == MAIN:
             raise ProfileError("the main profile can't be removed (rename it instead)")
+        self.avatar_file(profile_id).unlink(missing_ok=True)
         with self.db.session() as s:
             s.execute(delete(DeviceProfile).where(DeviceProfile.profile_id == profile_id))
             s.execute(delete(PlaybackState).where(PlaybackState.profile_id == profile_id))
@@ -190,6 +198,60 @@ class ProfileStore:
         for p in self.profiles():
             if p.name.casefold() == name.casefold() and p.id != except_id:
                 raise ProfileError(f"there's already a profile called {p.name!r}", 409)
+
+    # ------------------------------------------------------------ pictures
+
+    def avatar_file(self, profile_id: int) -> Path:
+        return DataLayout(self.data_dir).avatars_dir / f"{profile_id}.jpg"
+
+    def _avatar_url(self, profile_id: int) -> str | None:
+        try:
+            v = self.avatar_file(profile_id).stat().st_mtime_ns
+        except OSError:
+            return None
+        return f"/api/profiles/{profile_id}/avatar?v={v}"
+
+    def set_avatar(self, profile_id: int, data: bytes) -> ProfileInfo:
+        """Any photo Pillow reads (JPEG, PNG, WebP, HEIC...): turned upright,
+        cropped to a centred square, re-encoded as JPEG (so nothing from the
+        original, such as where a phone photo was taken, is kept)."""
+        import io
+
+        from PIL import Image, ImageOps, UnidentifiedImageError
+
+        from picturehouse.library.photos import _register_heif
+
+        self.get(profile_id)
+        if not data:
+            raise ProfileError("no picture was sent")
+        if len(data) > AVATAR_MAX_BYTES:
+            raise ProfileError("that picture is too big (20 MB at most)", 413)
+        _register_heif()
+        try:
+            with Image.open(io.BytesIO(data)) as im:
+                im = ImageOps.exif_transpose(im)
+                if im.mode in ("RGBA", "LA", "P"):  # transparent parts on the app's dark background
+                    bg = Image.new("RGB", im.size, (10, 13, 17))
+                    im = im.convert("RGBA")
+                    bg.paste(im, mask=im.getchannel("A"))
+                    im = bg
+                square = ImageOps.fit(im.convert("RGB"), (AVATAR_SIZE, AVATAR_SIZE),
+                                      Image.Resampling.LANCZOS)  # fmt: skip
+        except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
+            raise ProfileError("that file isn't a picture PictureHouse can read") from e
+        dest = self.avatar_file(profile_id)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_suffix(".tmp")
+        square.save(tmp, "JPEG", quality=88, optimize=True)
+        tmp.replace(dest)
+        self._changed()
+        return self.get(profile_id)
+
+    def remove_avatar(self, profile_id: int) -> ProfileInfo:
+        self.get(profile_id)
+        self.avatar_file(profile_id).unlink(missing_ok=True)
+        self._changed()
+        return self.get(profile_id)
 
     # ------------------------------------------------------------ hidden libraries
 

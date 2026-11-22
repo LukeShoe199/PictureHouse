@@ -1,9 +1,11 @@
-"""Generate the desktop app's icons from the same artwork the server uses.
+"""Generate the app icons from the same artwork the server uses
+(picturehouse.dlna.xmldocs.logo_image).
 
     uv run python scripts/make_desktop_icons.py
 
 Writes desktop/icons/: icon.ico (16-256 px, PNG-compressed entries) plus the
-PNG sizes Tauri's bundler expects.
+PNG sizes Tauri's bundler expects, and the Android app's launcher icons
+(square and round, every density).
 """
 
 from __future__ import annotations
@@ -13,7 +15,10 @@ from pathlib import Path
 
 from picturehouse.dlna.xmldocs import icon_png
 
-OUT = Path(__file__).resolve().parent.parent / "desktop" / "icons"
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "desktop" / "icons"
+ANDROID = ROOT / "Android APK" / "app" / "src" / "main" / "res"
+ANDROID_SIZES = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
 ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
 PNGS = {"32x32.png": 32, "128x128.png": 128, "128x128@2x.png": 256, "icon.png": 512}
 
@@ -37,6 +42,13 @@ def main() -> None:
     for name, size in PNGS.items():
         (OUT / name).write_bytes(icon_png(size, rgba=True))
     print(f"wrote icons to {OUT}")
+    if ANDROID.is_dir():
+        for density, size in ANDROID_SIZES.items():
+            d = ANDROID / f"mipmap-{density}"
+            d.mkdir(exist_ok=True)
+            (d / "ic_launcher.png").write_bytes(icon_png(size, rgba=True))
+            (d / "ic_launcher_round.png").write_bytes(icon_png(size, rgba=True, round_=True))
+        print(f"wrote Android icons to {ANDROID}")
 
 
 if __name__ == "__main__":

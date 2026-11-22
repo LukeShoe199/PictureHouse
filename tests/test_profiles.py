@@ -46,7 +46,7 @@ def ids(items):
 def test_a_child_device_sees_only_kids_libraries(house):
     kid = device(house["app"], KID)
     assert kid.get("/api/profiles").json()["current"] == {"id": house["sam"].id, "name": "Sam",
-                                                          "child": True}  # fmt: skip
+                                                          "child": True, "avatar": None}  # fmt: skip
     assert kid.get("/api/films").json()["total"] == 0
     assert kid.get("/api/home-videos").json()["total"] == 0
     assert kid.get("/api/music/artists").json()["total"] == 0
@@ -409,3 +409,87 @@ def test_an_approved_film_shows_even_if_its_folder_was_hidden_from_the_child(hou
         pc.put(f"/api/items/{film}/kids", json={"approved": False})
         pc.put("/api/libraries/Films", json={"hidden_from": []})
         pc.put("/api/libraries/TV", json={"hidden_from": []})
+
+
+# ---------------------------------------------------------------- pictures
+
+
+def _photo(w: int, h: int, fmt: str = "JPEG", exif_rotate: bool = False) -> bytes:
+    import io
+
+    from PIL import Image
+
+    im = Image.new("RGB", (w, h), (200, 30, 30))
+    im.paste((30, 30, 200), (0, 0, w // 2, h))  # left half blue, right half red
+    buf = io.BytesIO()
+    if exif_rotate:  # a phone photo held sideways: stored landscape, shown portrait
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        im.save(buf, fmt, exif=exif)
+    else:
+        im.save(buf, fmt)
+    return buf.getvalue()
+
+
+def test_a_profile_picture_is_squared_upright_and_shown_to_every_device(house, tmp_path):
+    import io
+
+    from PIL import Image
+
+    pc, store = house["pc"], house["store"]
+    sam = house["sam"].id
+    r = pc.put(f"/api/profiles/{sam}/avatar", content=_photo(1200, 800, exif_rotate=True),
+               headers={"Content-Type": "image/jpeg"})  # fmt: skip
+    try:
+        assert r.status_code == 200, r.text
+        url = r.json()["avatar"]
+        assert url.startswith(f"/api/profiles/{sam}/avatar?v=")
+        listed = {p["id"]: p for p in pc.get("/api/profiles").json()["profiles"]}
+        assert listed[sam]["avatar"] == url and listed[1]["avatar"] is None
+        kid = device(house["app"], KID)  # the child's own device can see it (the picker)
+        got = kid.get(url)
+        assert got.status_code == 200 and got.headers["content-type"] == "image/jpeg"
+        with Image.open(io.BytesIO(got.content)) as im:
+            assert im.size == (512, 512)
+            assert not im.getexif()  # nothing of the original kept (e.g. GPS)
+            # Turned upright: the blue half (left when stored) is now on top.
+            top, bottom = im.getpixel((256, 60)), im.getpixel((256, 450))
+            assert top[2] > top[0] and bottom[0] > bottom[2]
+        assert (store.data_dir / "avatars" / f"{sam}.jpg").is_file()
+        # Only an admin changes pictures; a child device can't.
+        assert kid.put(f"/api/profiles/{sam}/avatar", content=_photo(10, 10)).status_code == 403
+        bad = pc.put(f"/api/profiles/{sam}/avatar", content=b"not a picture")
+        assert bad.status_code == 400 and "isn't a picture" in bad.json()["detail"]
+        png = pc.put(f"/api/profiles/{sam}/avatar", content=_photo(64, 300, "PNG"))
+        assert png.status_code == 200 and png.json()["avatar"] != url  # new version, new URL
+    finally:
+        r = pc.delete(f"/api/profiles/{sam}/avatar")
+    assert r.status_code == 200 and r.json()["avatar"] is None
+    assert pc.get(f"/api/profiles/{sam}/avatar").status_code == 404
+
+
+def test_a_removed_profile_takes_its_picture_with_it(house):
+    pc, store = house["pc"], house["store"]
+    pid = pc.post("/api/profiles", json={"name": "Visitor"}).json()["id"]
+    assert pc.put(f"/api/profiles/{pid}/avatar", content=_photo(50, 50)).status_code == 200
+    assert store.avatar_file(pid).is_file()
+    assert pc.delete(f"/api/profiles/{pid}").status_code == 204
+    assert not store.avatar_file(pid).exists()
+
+
+def test_cli_profile_picture(tmp_path):
+    data, run = tmp_path / "d", CliRunner()
+
+    def cli(*args, **kw):
+        return run.invoke(cli_app, ["--data-dir", str(data), *args], **kw)
+
+    photo = tmp_path / "me.jpg"
+    photo.write_bytes(_photo(300, 200))
+    r = cli("profile", "picture", "Main", str(photo))
+    assert r.exit_code == 0 and "picture set" in r.output, r.output
+    assert (data / "avatars" / "1.jpg").is_file()
+    junk = tmp_path / "junk.jpg"
+    junk.write_bytes(b"nope")
+    assert cli("profile", "picture", "Main", str(junk)).exit_code != 0
+    assert cli("profile", "picture", "Main", "--remove").exit_code == 0
+    assert not (data / "avatars" / "1.jpg").exists()

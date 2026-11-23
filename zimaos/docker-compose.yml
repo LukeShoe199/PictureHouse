@@ -91,6 +91,8 @@ x-casaos:
   author: PictureHouse
   developer: PictureHouse
   category: Media
+  # The dashboard tile (made by scripts/make_desktop_icons.py).
+  icon: https://raw.githubusercontent.com/LukeShoe199/PictureHouse/main/zimaos/icon.png
   title:
     en_us: PictureHouse
   tagline:

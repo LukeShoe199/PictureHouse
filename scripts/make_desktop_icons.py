@@ -4,7 +4,8 @@
     uv run python scripts/make_desktop_icons.py
 
 Writes desktop/icons/: icon.ico (16-256 px, PNG-compressed entries) plus the
-PNG sizes Tauri's bundler expects, and the Android app's launcher icons
+PNG sizes Tauri's bundler expects, zimaos/icon.png (the ZimaOS dashboard
+tile), and the Android app's launcher icons
 (square and round, every density).
 """
 
@@ -42,6 +43,8 @@ def main() -> None:
     for name, size in PNGS.items():
         (OUT / name).write_bytes(icon_png(size, rgba=True))
     print(f"wrote icons to {OUT}")
+    # The ZimaOS / CasaOS dashboard tile (docker-compose.yml x-casaos.icon).
+    (ROOT / "zimaos" / "icon.png").write_bytes(icon_png(256, rgba=True))
     if ANDROID.is_dir():
         for density, size in ANDROID_SIZES.items():
             d = ANDROID / f"mipmap-{density}"
